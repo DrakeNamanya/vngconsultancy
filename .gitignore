@@ -31,3 +31,7 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+.dev.vars
+.wrangler
+dist/
+node_modules/

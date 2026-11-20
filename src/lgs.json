@@ -1,0 +1,122 @@
+[
+ {
+  "code": "kcca",
+  "label": "KCCA",
+  "region": "central",
+  "cat": "city"
+ },
+ {
+  "code": "masaka_city",
+  "label": "Masaka City",
+  "region": "central",
+  "cat": "city"
+ },
+ {
+  "code": "mukono_mc",
+  "label": "Mukono MC",
+  "region": "central",
+  "cat": "municipality"
+ },
+ {
+  "code": "mubende_mc",
+  "label": "Mubende MC",
+  "region": "central",
+  "cat": "municipality"
+ },
+ {
+  "code": "luwero_tc",
+  "label": "Luwero TC",
+  "region": "central",
+  "cat": "town_council"
+ },
+ {
+  "code": "mbarara_city",
+  "label": "Mbarara City",
+  "region": "western",
+  "cat": "city"
+ },
+ {
+  "code": "bushenyi_ishaka_mc",
+  "label": "Bushenyi-Ishaka MC",
+  "region": "western",
+  "cat": "municipality"
+ },
+ {
+  "code": "rubirizi_tc",
+  "label": "Rubirizi TC",
+  "region": "western",
+  "cat": "town_council"
+ },
+ {
+  "code": "kasese_mc",
+  "label": "Kasese MC",
+  "region": "western",
+  "cat": "municipality"
+ },
+ {
+  "code": "mbale_city",
+  "label": "Mbale City",
+  "region": "eastern",
+  "cat": "city"
+ },
+ {
+  "code": "jinja_city",
+  "label": "Jinja City",
+  "region": "eastern",
+  "cat": "city"
+ },
+ {
+  "code": "tororo_mc",
+  "label": "Tororo MC",
+  "region": "eastern",
+  "cat": "municipality"
+ },
+ {
+  "code": "namutumba_tc",
+  "label": "Namutumba TC",
+  "region": "eastern",
+  "cat": "town_council"
+ },
+ {
+  "code": "gulu_city",
+  "label": "Gulu City",
+  "region": "northern",
+  "cat": "city"
+ },
+ {
+  "code": "lira_city",
+  "label": "Lira City",
+  "region": "northern",
+  "cat": "city"
+ },
+ {
+  "code": "kitgum_mc",
+  "label": "Kitgum MC",
+  "region": "northern",
+  "cat": "municipality"
+ },
+ {
+  "code": "kigumba_tc",
+  "label": "Kigumba TC",
+  "region": "northern",
+  "cat": "town_council"
+ },
+ {
+  "code": "arua_city",
+  "label": "Arua City",
+  "region": "west_nile",
+  "cat": "city"
+ },
+ {
+  "code": "koboko_mc",
+  "label": "Koboko MC",
+  "region": "west_nile",
+  "cat": "municipality"
+ },
+ {
+  "code": "adjumani_tc",
+  "label": "Adjumani TC",
+  "region": "west_nile",
+  "cat": "town_council"
+ }
+]

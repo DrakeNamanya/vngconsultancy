@@ -1,0 +1,688 @@
+{
+"q": {
+"start": {
+"t": "start",
+"l": "",
+"list": null,
+"sec": ""
+},
+"end": {
+"t": "end",
+"l": "",
+"list": null,
+"sec": ""
+},
+"today": {
+"t": "today",
+"l": "",
+"list": null,
+"sec": ""
+},
+"deviceid": {
+"t": "deviceid",
+"l": "",
+"list": null,
+"sec": ""
+},
+"consent_interview": {
+"t": "select_one",
+"l": "Can we go ahead with the interview?",
+"list": "yn",
+"sec": "Introduction and consent"
+},
+"consent_audio": {
+"t": "select_one",
+"l": "CONFIRM: before opening this form, the audio-recording consent was read out and the respondent agreed to audio recording of the interview. Was this agreed? (If No, the recording is discarded. The recording will be used only for analysis for this study and will not be shared outside the study team.)",
+"list": "yn",
+"sec": "Introduction and consent"
+},
+"interview_audio": {
+"t": "background-audio",
+"l": "",
+"list": null,
+"sec": ""
+},
+"enumerator_id": {
+"t": "text",
+"l": "Enumerator ID",
+"list": null,
+"sec": "Section A: Respondent & Administrative Background"
+},
+"interview_date": {
+"t": "date",
+"l": "Date of Interview",
+"list": null,
+"sec": "Section A: Respondent & Administrative Background"
+},
+"region": {
+"t": "select_one",
+"l": "Region",
+"list": "region",
+"sec": "Section A: Respondent & Administrative Background"
+},
+"lg_name": {
+"t": "select_one",
+"l": "Name of Local Government (LG)",
+"list": "lg",
+"sec": "Section A: Respondent & Administrative Background"
+},
+"lg_category": {
+"t": "select_one",
+"l": "Category of Local Government",
+"list": "lg_cat",
+"sec": "Section A: Respondent & Administrative Background"
+},
+"respondent_affiliation": {
+"t": "select_one",
+"l": "A2. Primary Department/Affiliation of Respondent: Which institutional office do you represent?",
+"list": "affil",
+"sec": "Section A: Respondent & Administrative Background"
+},
+"resp_group": {
+"t": "calculate",
+"l": "",
+"list": null,
+"sec": "Section A: Respondent & Administrative Background"
+},
+"respondent_name": {
+"t": "text",
+"l": "Name and Designation of Respondent (Optional)",
+"list": null,
+"sec": "Section A: Respondent & Administrative Background"
+},
+"b1_awareness": {
+"t": "select_one",
+"l": "B1. Awareness of Directives: Are you familiar with the Ministry of Local Government circular Ref: HRM22/180/01 (directive on the \"Restoration of Trade Order in Local Governments\", issued on 10 March 2026) and the Cabinet directives on enforcing the Trade (Licensing) Act, Cap 101?",
+"list": "yn_partly",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b2_ordinances": {
+"t": "select_one",
+"l": "B2. Adequacy of Local Ordinances: Does your Local Government have localized ordinances, bylaws, or frameworks to domesticate national trade-order policies?",
+"list": "ordinances",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b3_clarity": {
+"t": "select_one",
+"l": "B3. Clarity of Enforcement Guidelines: Rate the clarity of the guidelines provided by the central government (MoLG) for executing the trade order crackdown.",
+"list": "clarity",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b4_coordination": {
+"t": "select_one",
+"l": "B4. Institutional Coordination: How would you rate the coordination between technical staff (enforcement/law enforcement), political leadership, and security organs (Police/LDUs) during enforcement?",
+"list": "coord",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b5_legal_adequacy": {
+"t": "select_one",
+"l": "B5. Legal gaps: To what extent are the existing local bylaws (or the Trade (Licensing) Act Cap 101) clear, unambiguous, and adequate for prosecuting violations without facing court injunctions?",
+"list": "legal_adeq",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b6_financial": {
+"t": "select_one",
+"l": "Financial resources",
+"list": "resource",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b6_transport": {
+"t": "select_one",
+"l": "Transport logistics (e.g., tow trucks, pick-up lorries)",
+"list": "resource",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b6_protective": {
+"t": "select_one",
+"l": "Protective gear available to law enforcement teams",
+"list": "resource",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b6_resources_text": {
+"t": "text",
+"l": "B6b. What logistics and resources were required for enforcement?",
+"list": null,
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b7_consultation": {
+"t": "text",
+"l": "B7. Stakeholder Consultation & Pre-Enforcement Engagement: Before executing crackdowns, what structured consultative mechanisms were undertaken with affected trader associations?",
+"list": null,
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b8_grievance": {
+"t": "select_one",
+"l": "B8. Grievance Redress & Dispute Resolution: Are there any formal grievance redress and dispute resolution mechanisms?",
+"list": "yn",
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"b8_grievance_list": {
+"t": "text",
+"l": "If yes, please list the applicable formal grievance redress mechanisms for affected evictees.",
+"list": null,
+"sec": "Section B: Legal, Policy Frameworks & Institutional Coordination"
+},
+"c1_methods": {
+"t": "text",
+"l": "C1. Methods of Enforcement Used: What strategies has your LG utilized in enforcing the trade order?",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c2_operations": {
+"t": "text",
+"l": "C2. Specific Enforcement Operations Deployed: Which tactical methods have been actively deployed in your jurisdiction since the Cabinet/MoLG directives - and how effective were they?",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c3_status": {
+"t": "select_one",
+"l": "C3. Operational Status & Continuity: What is the current enforcement status of trade order within your jurisdiction?",
+"list": "enf_status",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c3_status_other": {
+"t": "text",
+"l": "Other - specify",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c4_success": {
+"t": "select_one",
+"l": "C4. Perceived Success Level: Overall, how would you rate the success of the trade order enforcement in your urban authority?",
+"list": "success",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c5_positive": {
+"t": "select_multiple",
+"l": "C5. Observed Positive Impacts: Which of the following positive outcomes have been registered since enforcement began? (Select all that apply)",
+"list": "positive",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c5_positive_other": {
+"t": "text",
+"l": "Other positive outcome - specify",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c6_challenges": {
+"t": "select_multiple",
+"l": "C6. Key Challenges & Bottlenecks: What have been the major obstacles encountered during implementation? (Select all that apply)",
+"list": "challenges",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c6_challenges_other": {
+"t": "text",
+"l": "Other challenge - specify",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c7_lead_dept": {
+"t": "text",
+"l": "C7. Institutional Lead: Which internal department holds primary operational accountability for executing the trade order?",
+"list": null,
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c8_meeting_freq": {
+"t": "select_one",
+"l": "C8. Inter-Agency Coordination: How frequently does your Local Government hold formal operational coordination meetings with external security organs (e.g., Uganda Police Force, Local Defence Units) regarding trade order?",
+"list": "meet_freq",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"c9_plan": {
+"t": "select_one",
+"l": "C9. Strategic & Budgetary Planning: Does your Local Government have a written, costed annual implementation plan or departmental work plan specifically dedicated to trade order management and enforcement?",
+"list": "plan",
+"sec": "Section C: Enforcement Approaches, Implementation, Successes and Failures"
+},
+"d1_rating": {
+"t": "select_one",
+"l": "How has the trade order enforcement affected traffic flow, vehicular congestion, and pedestrian walkway accessibility in high-density commercial hubs?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d1_evidence": {
+"t": "text",
+"l": "What specific evidence or observation supports this rating? (Specify the data source, e.g., traffic police reports, visual observations, average transit time metrics)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"d2_rating": {
+"t": "select_one",
+"l": "How has the enforcement impacted general urban cleanliness, solid waste disposal, and the maintenance of drainage channels?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d2_evidence": {
+"t": "text",
+"l": "What specific evidence supports this rating? (Specify the data source, e.g., garbage tonnage collection reports, public health inspection logs)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"d3_rating": {
+"t": "select_one",
+"l": "How has the occupancy rate and active utilization of officially gazetted public markets and alternative trading spaces changed?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d3_evidence": {
+"t": "text",
+"l": "What specific evidence supports this rating? (Specify the data source, e.g., market master allocation registers, daily vendor attendance counts)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"d4_rating": {
+"t": "select_one",
+"l": "How has the rate of business registration, trade license applications, and formalization among small-scale enterprises shifted?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d4_evidence": {
+"t": "text",
+"l": "What specific evidence supports this rating? (Specify the data source, e.g., revenue licensing portal data, trade license registry figures)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"d5_rating": {
+"t": "select_one",
+"l": "How have actual collections from local revenue streams (market dues, parking fees, property rates, and trade licenses) performed post-enforcement?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d5_evidence": {
+"t": "text",
+"l": "What specific evidence supports this rating? (Specify the data source, e.g., quarterly financial statements, IFMS reports, bank deposit slips)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"d6_rating": {
+"t": "select_one",
+"l": "How has compliance with physical planning standards and the reduction of unauthorized structures on road reserves evolved?",
+"list": "outcome",
+"sec": "Section D: Outcomes"
+},
+"d6_evidence": {
+"t": "text",
+"l": "What specific evidence supports this rating? (Specify the data source, e.g., physical planning compliance notices, demolition logs, building inspection reports)",
+"list": null,
+"sec": "Section D: Outcomes"
+},
+"e1_licenses_before": {
+"t": "integer",
+"l": "E1.1 Total number of trade licenses issued - BEFORE enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e1_licenses_after": {
+"t": "integer",
+"l": "E1.1 Total number of trade licenses issued - AFTER enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e1_osr_before": {
+"t": "decimal",
+"l": "E1.2 Own Source Revenue collections from markets/licenses (UGX) - BEFORE enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e1_osr_after": {
+"t": "decimal",
+"l": "E1.2 Own Source Revenue collections from markets/licenses (UGX) - AFTER enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e1_stalls_before": {
+"t": "integer",
+"l": "E1.3 Number of registered operating stalls in gazetted markets - BEFORE enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e1_stalls_after": {
+"t": "integer",
+"l": "E1.3 Number of registered operating stalls in gazetted markets - AFTER enforcement",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e2_period": {
+"t": "text",
+"l": "E2. Reporting Baseline Period: What specific baseline and review periods do the figures above correspond to? (e.g., July 2024 - June 2025 vs. July 2025 - March 2026)",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e3_documents": {
+"t": "text",
+"l": "E3. Verification Documents & Source Archiving: Which specific administrative documents substantiate the quantitative figures provided? (List them)",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e4_data_access": {
+"t": "text",
+"l": "E4. Institutional Data Availability & Access: Which internal records, reports, or administrative logs are readily accessible at your office to verify the responses provided during this interview? (Outline / list)",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"e5_documents_file": {
+"t": "file",
+"l": "E5. Attach any document shared by the respondent (optional)",
+"list": null,
+"sec": "Section E: Administrative Evidence"
+},
+"f1_livelihood": {
+"t": "select_one",
+"l": "F1. Impact on Informal Livelihoods: How has the trade order enforcement affected informal traders, youth, and women-led micro-enterprises?",
+"list": "livelihood",
+"sec": "Section F: Socio-Economic Impacts on Livelihoods and Informality"
+},
+"f2_alternatives": {
+"t": "select_one",
+"l": "F2. Provision of Alternatives: Prior to or during the crackdown, were adequate, affordable, and accessible alternative trading locations provided for displaced vendors?",
+"list": "alt_provided",
+"sec": "Section F: Socio-Economic Impacts on Livelihoods and Informality"
+},
+"f3_formalization": {
+"t": "select_one",
+"l": "F3. Business Formalization: Have you noted an increase in traders applying for formal trading licenses or registering businesses following the enforcement?",
+"list": "formalization",
+"sec": "Section F: Socio-Economic Impacts on Livelihoods and Informality"
+},
+"f4_alt_suitability": {
+"t": "select_one",
+"l": "F4. Suitability and Cost of Alternative Spaces: Where alternative trading spaces were designated, how do traders evaluate their suitability?",
+"list": "alt_suit",
+"sec": "Section F: Socio-Economic Impacts on Livelihoods and Informality"
+},
+"g1_success_stories": {
+"t": "text",
+"l": "G1. Success Stories / Good Practices / Innovations: Describe any unique, conflict-sensitive, or innovative approach (including public-private partnerships or peer-learning mechanisms) that your LG used to minimize friction and balance trade order with livelihood protection.",
+"list": null,
+"sec": "Section G: Lessons Learnt, Best Practices, and Future Recommendations"
+},
+"g2_unforeseen": {
+"t": "text",
+"l": "G2. Unforeseen Effects: Please highlight any unforeseen effects or challenges that were occasioned by the enforcement.",
+"list": null,
+"sec": "Section G: Lessons Learnt, Best Practices, and Future Recommendations"
+},
+"g3_barriers": {
+"t": "select_multiple",
+"l": "G3. Primary Implementation Bottlenecks: What are the top three systemic barriers undermining sustainable trade order enforcement across urban councils? (Select up to 3)",
+"list": "barriers",
+"sec": "Section G: Lessons Learnt, Best Practices, and Future Recommendations"
+},
+"g4_recommendations": {
+"t": "text",
+"l": "G4. Policy Recommendations / Proposals for the National Strategic Framework: What key provisions or strategies should be included in the upcoming national trade-order framework to ensure nationwide consistency, conflict sensitivity, and local economic development? Briefly outline them.",
+"list": null,
+"sec": "Section G: Lessons Learnt, Best Practices, and Future Recommendations"
+},
+"g5_remarks": {
+"t": "text",
+"l": "G5. Any additional remarks / comments from the respondent?",
+"list": null,
+"sec": "Section G: Lessons Learnt, Best Practices, and Future Recommendations"
+},
+"h1_1": {
+"t": "text",
+"l": "Describe the trade-order measures implemented, the timeline, the legal/policy basis and the responsible offices.",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_2": {
+"t": "text",
+"l": "What planning, consultation, sensitisation and trader-notification steps preceded enforcement?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_3": {
+"t": "text",
+"l": "What alternative trading spaces or market arrangements were available? How were affordability, capacity and access assessed?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_4": {
+"t": "text",
+"l": "What enforcement procedures, coordination mechanisms, safeguards and complaint channels were used?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_5": {
+"t": "text",
+"l": "What data are available on congestion, cleanliness, drainage, licensing, market occupancy, business formalisation and own-source revenue before and after implementation?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_6": {
+"t": "text",
+"l": "What were the main implementation challenges and unintended effects?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_7": {
+"t": "text",
+"l": "What practices worked well, for whom, and under what conditions?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h1_8": {
+"t": "text",
+"l": "What changes are needed in national guidance, local procedures, resources and accountability?",
+"list": null,
+"sec": "Section H1: Key Informant Interview Guide - Local Government Officials and other Key Informants"
+},
+"h2_1": {
+"t": "text",
+"l": "What information did you receive about trade-order requirements and designated trading locations?",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"h2_2": {
+"t": "text",
+"l": "How did enforcement affect your business location, sales, costs, customer access and ability to obtain licences?",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"h2_3": {
+"t": "text",
+"l": "Were alternative trading spaces available, affordable, safe and accessible? Why or why not?",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"h2_4": {
+"t": "text",
+"l": "How were traders consulted and how could concerns or complaints be raised?",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"h2_5": {
+"t": "text",
+"l": "What changes would make compliance practical while maintaining safe and accessible public spaces?",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"h2_6": {
+"t": "text",
+"l": "Are impacts different for women, young people, persons with disabilities or other groups? Please describe without sharing sensitive personal details.",
+"list": null,
+"sec": "Section H2: Interview / Discussion Guide - Traders and Business Representatives"
+},
+"photo": {
+"t": "image",
+"l": "Photo",
+"list": null,
+"sec": "Media Attachments: Photo Evidence"
+},
+"photo_caption": {
+"t": "text",
+"l": "Caption: what does this photo show, and where?",
+"list": null,
+"sec": "Media Attachments: Photo Evidence"
+},
+"enumerator_summary": {
+"t": "text",
+"l": "Enumerator's summary of the interview: key themes, notable quotes, and anything the respondent stressed.",
+"list": null,
+"sec": "Enumerator wrap-up"
+}
+},
+"ch": {
+"yn": {
+"yes": "Yes",
+"no": "No"
+},
+"yn_partly": {
+"yes": "Yes",
+"no": "No",
+"partly": "Partly"
+},
+"region": {
+"central": "Central",
+"western": "Western",
+"eastern": "Eastern",
+"northern": "Northern",
+"west_nile": "West Nile"
+},
+"lg": {
+"kcca": "KCCA",
+"masaka_city": "Masaka City",
+"mukono_mc": "Mukono MC",
+"mubende_mc": "Mubende MC",
+"luwero_tc": "Luwero TC",
+"mbarara_city": "Mbarara City",
+"bushenyi_ishaka_mc": "Bushenyi-Ishaka MC",
+"rubirizi_tc": "Rubirizi TC",
+"kasese_mc": "Kasese MC",
+"mbale_city": "Mbale City",
+"jinja_city": "Jinja City",
+"tororo_mc": "Tororo MC",
+"namutumba_tc": "Namutumba TC",
+"gulu_city": "Gulu City",
+"lira_city": "Lira City",
+"kitgum_mc": "Kitgum MC",
+"kigumba_tc": "Kigumba TC",
+"arua_city": "Arua City",
+"koboko_mc": "Koboko MC",
+"adjumani_tc": "Adjumani TC"
+},
+"lg_cat": {
+"city": "City",
+"municipality": "Municipality",
+"town_council": "Town Council"
+},
+"affil": {
+"technical_officer": "Technical Officer (Chief Administrative Officer / Town Clerk, Commercial Officer, Physical Planner / Urban Planning Department)",
+"law_enforcement": "Law Enforcement Officer (Municipal Police Unit, Public Health Officer, Environment & Sanitation Department)",
+"commercial_led": "Commercial Office / Local Economic Development (LED) Unit",
+"political_leader": "Political Leader (Mayor, Division Chairperson, Councillor)",
+"trader_rep": "Business Community / Trader Representative (Market Vendors Association, Hawkers/Street Vendors, Formal SME representatives)",
+"organized_business": "Organized Business / Market Vendors Leadership",
+"other_informant": "Other Key Informant (e.g., MoLG official, UAAU representative, Religious/Civil Society leader)"
+},
+"ordinances": {
+"full": "Yes, fully developed and operational",
+"partial": "Partially developed",
+"none": "No local framework exists"
+},
+"clarity": {
+"1": "1 - Very unclear",
+"2": "2 - Unclear",
+"3": "3 - Neither clear nor unclear",
+"4": "4 - Clear",
+"5": "5 - Very clear"
+},
+"coord": {
+"high": "Highly coordinated",
+"moderate": "Moderate",
+"fragmented": "Fragmented",
+"conflicting": "Conflicting"
+},
+"legal_adeq": {
+"adequate": "Fully adequate",
+"loopholes": "Ambiguous with legal loopholes",
+"outdated": "Outdated and inadequate"
+},
+"resource": {
+"1": "1 - Severely deficient",
+"2": "2 - Deficient",
+"3": "3 - Moderately adequate",
+"4": "4 - Adequate",
+"5": "5 - Fully adequate"
+},
+"success": {
+"1": "1 - Failed completely",
+"2": "2 - Mostly failed",
+"3": "3 - Partly successful",
+"4": "4 - Mostly successful",
+"5": "5 - Highly successful"
+},
+"positive": {
+"congestion": "Reduced traffic congestion and improved pedestrian walkway mobility",
+"sanitation": "Cleaner drainage systems and improved general urban sanitation/waste management",
+"stalls": "Increased uptake of stalls in gazetted markets",
+"osr": "Growth in Local Government Own Source Revenue (OSR) projections/collections",
+"building": "Enhanced building control and order",
+"none_observed": "None observed",
+"other": "Other - specify"
+},
+"challenges": {
+"sme_resistance": "Resistance and pushback from small and medium-sized enterprises (SMEs) / informal vendors",
+"no_spaces": "Insufficient alternative trading spaces/gazetted markets",
+"political": "Inconsistent political support or interference",
+"funding": "Inadequate funding and logistical capacity for enforcement teams",
+"force": "Allegations of excessive use of force or human rights concerns",
+"corruption": "Corruption or bribery during enforcement",
+"other": "Other - specify"
+},
+"enf_status": {
+"continuous": "Continuous, routine daily monitoring and enforcement",
+"periodic": "Periodic, campaign-style crackdowns (e.g., monthly sweeps)",
+"suspended": "Suspended or relaxed enforcement following stakeholder pushback",
+"reactive": "Strictly reactive enforcement (only in response to central government directives)",
+"other": "Other - specify"
+},
+"meet_freq": {
+"weekly": "Weekly",
+"monthly": "Monthly",
+"adhoc": "Ad-hoc",
+"never": "Never"
+},
+"plan": {
+"costed": "Yes, fully costed and budgeted",
+"uncosted": "Yes, but uncosted",
+"none": "No formal written plan exists"
+},
+"outcome": {
+"improved": "Improved",
+"no_change": "No significant change",
+"worsened": "Worsened",
+"mixed": "Mixed",
+"not_known": "Not known"
+},
+"livelihood": {
+"severe": "Severely negative impact on daily income",
+"short_term": "Short-term disruption but manageable",
+"positive": "Positive transition to formal structures"
+},
+"alt_provided": {
+"adequate": "Yes, adequate spaces provided",
+"partial": "Partially provided, but too costly or distant",
+"none": "No alternative spaces provided"
+},
+"formalization": {
+"significant": "Significant increase",
+"marginal": "Marginal increase",
+"no_change": "No change",
+"decrease": "Decrease"
+},
+"alt_suit": {
+"suitable": "Highly accessible, affordable, and adequately sized for business operations",
+"poor": "Poorly located (out of customer reach), inadequate infrastructure, or too costly (high stall rent/taxes)",
+"none": "No alternative spaces were provided prior to displacement"
+},
+"barriers": {
+"political": "Political interference",
+"resistance": "Resistance from informal trade networks",
+"revenue": "Insufficient municipal revenue base",
+"corruption": "Corruption among enforcement officers",
+"harmonization": "Lack of national policy harmonization"
+}
+}
+}
