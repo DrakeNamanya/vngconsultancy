@@ -16,7 +16,7 @@ KoboToolbox ──sync──▶ Hono API (Cloudflare Worker) ──▶ D1 (submi
 * **Transcript gate**: loops/hallucinations, very low confidence or almost no speech put a transcript in **Needs review**. It is excluded from themes until a person accepts it. The server re-checks every upload independently of the worker.
 
 ## Dashboard tabs
-Overview · Field coverage (vs 4 official + 2 trader KIIs per LG) · Themes (+ official-vs-trader divergence, emergent terms) · LG comparison heat-map · Evidence & quotes (filterable, CSV export) · Closed questions (by group) · Triangulation (Section D ratings vs Section E figures) · Interviews & audio (player + clickable transcript) · Data quality (flags, per-enumerator) · Pipeline (sync, demo data, exports).
+Overview · Field coverage (vs 4 official + 2 trader KIIs per LG) · Themes (+ official-vs-trader divergence, emergent terms) · LG comparison heat-map · Evidence & quotes (filterable, CSV export) · Closed questions (by group) · Triangulation (Section D ratings vs Section E figures) · Interviews & audio (player + clickable transcript) · Data quality (flags, per-enumerator) · Pipeline (sync, exports).
 
 ## Run locally
 ```bash
@@ -36,5 +36,5 @@ Config: `wrangler.jsonc` → `KOBO_FORMS` = `"<asset uid>:kii,<asset uid>:fgd"`.
 * The Kobo token is never sent to the browser; audio is proxied.
 
 ## Status
-Done: Kobo sync, schema-aware normalisation, audio worker, transcript gate, coding, all dashboard views, exports, demo data (flagged `is_demo`, hidden by default).
+Done: Kobo sync, schema-aware normalisation, audio worker, transcript gate, coding, all dashboard views, exports.
 Not done: FGD form (Form B) is not connected yet (add its uid to `KOBO_FORMS`), no production deploy, coding is keyword-based (no LLM; the workspace LLM proxy is blocked on the free plan), Whisper accuracy on Ugandan-accented English and local languages is unvalidated.

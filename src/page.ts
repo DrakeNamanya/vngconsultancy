@@ -17,9 +17,7 @@ export const page = () => `<!doctype html>
   <label>Region <select id="f-region"><option value="">All</option></select></label>
   <label>Local government <select id="f-lg"><option value="">All</option></select></label>
   <label>Respondent group <select id="f-grp"><option value="">All</option><option value="official">Officials</option><option value="trader">Traders</option></select></label>
-  <label class="chk"><input type="checkbox" id="f-demo"> Include demo data</label>
   <button id="btn-reset" class="ghost"><i class="fa-solid fa-rotate-left"></i> Reset</button>
-  <span id="demo-banner" class="banner hidden"><i class="fa-solid fa-flask"></i> Demo data included in view</span>
 </nav>
 <nav id="tabs"></nav>
 <main id="view"><div class="loading">Loading&hellip;</div></main>

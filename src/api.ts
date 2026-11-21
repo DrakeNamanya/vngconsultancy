@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { Env, forms, fetchAsset, fetchAllData, normalise, buildSchema, koboHeaders } from './kobo'
 import { THEMES, THEME_BY_CODE, DIMENSIONS, OBJECTIVES, codeItems, emergentTerms, SKIP_TEXT } from './codebook'
-import { seedDemo, clearDemo } from './demo'
 import SCHEMA from './schema.json'
 import LGS from './lgs.json'
 
@@ -25,8 +24,7 @@ const admin = async (c: any, next: any) => {
 // ---------- shared loaders ----------
 type Sub = any
 async function loadSubs(c: any, opts: { consented?: boolean } = {}): Promise<Sub[]> {
-  const demo = c.req.query('demo') === '1'
-  const { results } = await c.env.DB.prepare(`SELECT * FROM submissions ${demo ? '' : 'WHERE is_demo=0'} ORDER BY id`).all()
+    const { results } = await c.env.DB.prepare(`SELECT * FROM submissions  ORDER BY id`).all()
   const region = c.req.query('region'), lg = c.req.query('lg'), grp = c.req.query('grp')
   return results.filter((s: any) => (!region || s.region === region) && (!lg || s.lg === lg) && (!grp || s.grp === grp)
     && (!opts.consented || s.consent_interview !== 'no'))
@@ -34,7 +32,6 @@ async function loadSubs(c: any, opts: { consented?: boolean } = {}): Promise<Sub
 }
 const codeFilter = (c: any) => {
   const w: string[] = [], b: any[] = []
-  if (c.req.query('demo') !== '1') w.push('is_demo=0')
   for (const k of ['region', 'lg', 'grp', 'dimension', 'objective', 'theme', 'polarity', 'evidence']) {
     const v = c.req.query(k); if (v) { w.push(`${k}=?`); b.push(v) }
   }
@@ -203,16 +200,13 @@ app.get('/api/audio/:id', async (c) => {
   return new Response(r.body, { status: r.status, headers: out })
 })
 
-app.post('/api/demo/seed', admin, async (c) => c.json(await seedDemo(c.env, Number(c.req.query('n') || 70), insCode)))
-app.delete('/api/demo', admin, async (c) => c.json(await clearDemo(c.env)))
 
 // ---------- read APIs ----------
 app.get('/api/config', async (c) => {
   const lastSync = await c.env.DB.prepare("SELECT value FROM meta WHERE key='last_sync'").first<any>()
-  const demoN = await c.env.DB.prepare('SELECT COUNT(*) n FROM submissions WHERE is_demo=1').first<any>()
   const realN = await c.env.DB.prepare('SELECT COUNT(*) n FROM submissions WHERE is_demo=0').first<any>()
   return c.json({
-    lgs: LGS, regions: S.ch.region, affil: S.ch.affil, last_sync: lastSync?.value || null, demo_rows: demoN?.n || 0, real_rows: realN?.n || 0,
+    lgs: LGS, regions: S.ch.region, affil: S.ch.affil, last_sync: lastSync?.value || null, real_rows: realN?.n || 0,
     dimensions: DIMENSIONS, objectives: OBJECTIVES, themes: THEMES.map(t => ({ code: t.code, label: t.label, dim: t.dim })),
     kobo_configured: !!c.env.KOBO_TOKEN, admin_configured: !!c.env.INGEST_TOKEN,
     targets: { officials_per_lg: 4, traders_per_lg: 2, fgd_per_lg: 2 },
@@ -222,7 +216,7 @@ app.get('/api/config', async (c) => {
 app.get('/api/overview', async (c) => {
   const subs = await loadSubs(c)
   const cons = subs.filter(s => s.consent_interview !== 'no')
-  const tr: any = (await c.env.DB.prepare(`SELECT COUNT(*) n, COALESCE(SUM(duration),0) d, COALESCE(AVG(confidence),0) conf FROM transcripts t JOIN submissions s ON s.id=t.submission_id WHERE t.status='done' ${c.req.query('demo') === '1' ? '' : 'AND s.is_demo=0'}`).first()) || {}
+  const tr: any = (await c.env.DB.prepare(`SELECT COUNT(*) n, COALESCE(SUM(duration),0) d, COALESCE(AVG(confidence),0) conf FROM transcripts t JOIN submissions s ON s.id=t.submission_id WHERE t.status='done' `).first()) || {}
   const cf = codeFilter(c)
   const cd: any = await c.env.DB.prepare(`SELECT COUNT(*) n, COUNT(DISTINCT submission_id) subs, COUNT(DISTINCT theme) themes FROM codes ${cf.where}`).bind(...cf.b).first()
   const audio: any = {}; subs.forEach(s => inc(audio, s.audio_status))
@@ -238,7 +232,6 @@ app.get('/api/overview', async (c) => {
     codes: { total: cd?.n || 0, submissions: cd?.subs || 0, themes: cd?.themes || 0, themes_total: THEMES.length },
     words, lgs_covered: lgsCovered, lgs_total: LGS.length, median_duration_min: dur.length ? +(median(dur)! / 60).toFixed(1) : null,
     by_group: byGrp, by_region: byRegion, by_lg: Object.entries(byLg).map(([k, v]) => ({ lg: k, label: lgLabel(k), n: v })), timeline: Object.entries(byDay).sort().map(([d, n]) => ({ d, n })),
-    demo_in_view: subs.filter(s => s.is_demo).length,
   })
 })
 

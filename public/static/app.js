@@ -5,7 +5,7 @@ const pct = (x, d = 0) => x == null ? '-' : (x * 100).toFixed(d) + '%'
 const fmt = n => n == null ? '-' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 })
 const mins = s => s == null ? '-' : (s / 60).toFixed(1) + ' min'
 const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`
-const S = { cfg: null, tab: 'overview', f: { region: '', lg: '', grp: '', demo: false }, charts: [], key: localStorage.getItem('adminKey') || '' }
+const S = { cfg: null, tab: 'overview', f: { region: '', lg: '', grp: '' }, charts: [], key: localStorage.getItem('adminKey') || '' }
 const COL = { teal: '#1f877d', navy: '#142a46', gold: '#edb14b', blue: '#2f6fb5', red: '#b94d4d', green: '#3f8f55', purple: '#7a5bb5', grey: '#9aa8b8' }
 const POLCOL = { positive: COL.green, negative: COL.red, mixed: COL.gold, neutral: COL.grey }
 const DIMCOL = () => Object.fromEntries(S.cfg.dimensions.map(d => [d.id, d.color]))
@@ -20,7 +20,7 @@ const TABS = [
 function qs(extra = {}) {
   const p = new URLSearchParams()
   const f = { ...S.f, ...extra }
-  for (const [k, v] of Object.entries(f)) { if (k === 'demo') { if (v) p.set('demo', '1') } else if (v) p.set(k, v) }
+  for (const [k, v] of Object.entries(f)) { if (v) p.set(k, v) }
   return p.toString()
 }
 async function api(path, extra) {
@@ -47,12 +47,10 @@ async function init() {
   S.cfg = await (await fetch('/api/config')).json()
   $('#f-region').innerHTML += Object.entries(S.cfg.regions).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')
   fillLg()
-  if (new URLSearchParams(location.search).get('demo') === '1') { S.f.demo = true; $('#f-demo').checked = true }
   $('#f-region').onchange = e => { S.f.region = e.target.value; S.f.lg = ''; fillLg(); render() }
   $('#f-lg').onchange = e => { S.f.lg = e.target.value; render() }
   $('#f-grp').onchange = e => { S.f.grp = e.target.value; render() }
-  $('#f-demo').onchange = e => { S.f.demo = e.target.checked; render() }
-  $('#btn-reset').onclick = () => { S.f = { region: '', lg: '', grp: '', demo: false }; ['f-region', 'f-lg', 'f-grp'].forEach(i => $('#' + i).value = ''); $('#f-demo').checked = false; fillLg(); render() }
+  $('#btn-reset').onclick = () => { S.f = { region: '', lg: '', grp: '' }; ['f-region', 'f-lg', 'f-grp'].forEach(i => $('#' + i).value = ''); fillLg(); render() }
   $('#drawer-close').onclick = closeDrawer
   $('#drawer').onclick = e => { if (e.target.id === 'drawer') closeDrawer() }
   $('#tabs').innerHTML = TABS.map(([k, i, l]) => `<button data-t="${k}" class="${k === S.tab ? 'on' : ''}"><i class="fa-solid ${i}"></i>${l}</button>`).join('')
@@ -67,7 +65,6 @@ function fillLg() {
 function syncInfo() {
   const c = S.cfg
   $('#sync-info').innerHTML = `${c.real_rows} live submission${c.real_rows === 1 ? '' : 's'} &middot; last sync ${c.last_sync ? new Date(c.last_sync).toLocaleString() : 'never'}`
-  $('#demo-banner').classList.toggle('hidden', !S.f.demo)
 }
 async function render() {
   kill(); syncInfo()
@@ -83,7 +80,7 @@ const polStack = p => { const t = Object.values(p || {}).reduce((a, b) => a + b,
 const VIEWS = {}
 VIEWS.overview = async (v) => {
   const [o, th] = await Promise.all([api('overview'), api('themes')])
-  if (!o.total) { v.innerHTML = empty('No submissions in this view yet', 'Run a sync from the <b>Pipeline</b> tab, or tick <i>Include demo data</i> to preview the dashboard.'); return }
+  if (!o.total) { v.innerHTML = empty('No submissions in this view yet', 'Run a sync from the <b>Pipeline</b> tab.'); return }
   const a = o.audio, audioN = (a.done || 0)
   const eligible = (o.consented) - (a.declined || 0)
   v.innerHTML = `
@@ -186,7 +183,7 @@ VIEWS.evidence = async (v) => {
     if (!r.items.length) { list.innerHTML = empty('No excerpts match', 'Change filters or sync more data.'); return }
     list.innerHTML = `<div class="mu" style="margin-bottom:8px">Showing ${r.items.length} excerpts (longest first). Respondent names are never stored; phone numbers and emails are masked.</div>` + r.items.map(x => `<div class="quote ${x.polarity}">
       <p>&ldquo;${esc(x.excerpt)}&rdquo;</p><div class="meta"><span class="pill teal">${esc(x.theme_label)}</span><span class="pill ${EVID[x.evidence]}">${x.evidence}</span><span class="pill">${x.polarity}</span>
-      <span>${esc(x.lg_label)} &middot; ${GRP[x.grp] || x.grp || ''}</span><span>&middot; ${esc(x.q)}${x.source === 'audio' && x.seg_start != null ? ' @ ' + mmss(x.seg_start) : ''}</span>${x.is_demo ? '<span class="pill warn">demo</span>' : ''}
+      <span>${esc(x.lg_label)} &middot; ${GRP[x.grp] || x.grp || ''}</span><span>&middot; ${esc(x.q)}${x.source === 'audio' && x.seg_start != null ? ' @ ' + mmss(x.seg_start) : ''}</span>
       <a href="#" data-i="${x.sid}" data-t="${x.source === 'audio' ? x.seg_start : ''}" class="open">open interview <i class="fa-solid fa-arrow-up-right-from-square"></i></a></div></div>`).join('')
     list.querySelectorAll('a.open').forEach(a => a.onclick = ev => { ev.preventDefault(); showInterview(+a.dataset.i, a.dataset.t) })
   }
@@ -231,7 +228,7 @@ VIEWS.triang = async (v) => {
     ${Object.entries(t.verdicts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row"><span><span class="pill ${vc[k] || ''}">${k}</span></span><div class="bar ${k === 'consistent' ? '' : 'gold'}"><i style="width:${100 * n / tot}%"></i></div><span class="n">${n}</span></div>`).join('')}</div>
    <div class="card"><h3>Reported change by local government</h3><div class="sub">Summed before/after figures reported by officials: % change</div><canvas id="c-tri"></canvas></div></div>
   <div class="card"><h3>Pairs needing document verification</h3><div class="sub">Where the rating and the numbers disagree (click to open the interview)</div><div class="tw"><table><thead><tr><th>LG</th><th>Metric</th><th>Rating</th><th>Before</th><th>After</th><th>Change</th><th>Assessment</th><th>Docs cited</th></tr></thead><tbody>
-  ${t.rows.filter(r => r.verdict !== 'consistent' && r.verdict !== 'not comparable').slice(0, 80).map(r => `<tr class="click" data-i="${r.sid}"><td>${esc(r.label)}${r.demo ? ' <span class="pill warn">demo</span>' : ''}</td><td>${r.metric}</td><td>${r.rating.replace('_', ' ')}</td><td>${money(r.before)}</td><td>${money(r.after)}</td><td class="${r.change < 0 ? 'neg' : 'pos'}">${(r.change * 100).toFixed(0)}%</td><td><span class="pill ${vc[r.verdict]}">${r.verdict}</span></td><td>${r.docs ? '<i class="fa-solid fa-check pos"></i>' : '<span class="mu">none</span>'}</td></tr>`).join('') || '<tr><td colspan="8" class="mu">Nothing flagged</td></tr>'}
+  ${t.rows.filter(r => r.verdict !== 'consistent' && r.verdict !== 'not comparable').slice(0, 80).map(r => `<tr class="click" data-i="${r.sid}"><td>${esc(r.label)}</td><td>${r.metric}</td><td>${r.rating.replace('_', ' ')}</td><td>${money(r.before)}</td><td>${money(r.after)}</td><td class="${r.change < 0 ? 'neg' : 'pos'}">${(r.change * 100).toFixed(0)}%</td><td><span class="pill ${vc[r.verdict]}">${r.verdict}</span></td><td>${r.docs ? '<i class="fa-solid fa-check pos"></i>' : '<span class="mu">none</span>'}</td></tr>`).join('') || '<tr><td colspan="8" class="mu">Nothing flagged</td></tr>'}
   </tbody></table></div></div>`
   const mets = ['Trade licences', 'Market stalls', 'Own-source revenue'], cols = [COL.teal, COL.blue, COL.gold]
   const lgs = t.lg.filter(l => Object.values(l.change).some(x => x != null)).sort((a, b) => a.label.localeCompare(b.label))
@@ -248,7 +245,7 @@ VIEWS.interviews = async (v) => {
     const a = $('#i-aud').value, q = $('#i-q').value.toLowerCase()
     const rows = r.items.filter(x => (!a || x.audio === a) && (!q || (x.label + ' ' + (x.enumerator || '') + ' ' + x.id).toLowerCase().includes(q)))
     $('#i-n').textContent = rows.length + ' interviews'
-    $('#i-body').innerHTML = rows.map(x => `<tr class="click" data-i="${x.id}"><td>${x.demo ? '<span class="pill warn">demo</span> ' : ''}${x.id}</td><td><b>${esc(x.label)}</b></td><td>${GRP[x.grp] || '-'}</td><td>${x.date || '-'}</td><td>${mins(x.duration_sec)}</td><td>${esc(x.enumerator || '-')}</td><td>${x.words}</td><td>${x.codes}</td>
+    $('#i-body').innerHTML = rows.map(x => `<tr class="click" data-i="${x.id}"><td>${x.id}</td><td><b>${esc(x.label)}</b></td><td>${GRP[x.grp] || '-'}</td><td>${x.date || '-'}</td><td>${mins(x.duration_sec)}</td><td>${esc(x.enumerator || '-')}</td><td>${x.words}</td><td>${x.codes}</td>
       <td><span class="pill" style="background:${AUD[x.audio]?.[1] || '#eee'}22;color:${AUD[x.audio]?.[1] || '#555'}">${x.consent === 'no' ? 'declined interview' : (AUD[x.audio]?.[0] || x.audio)}</span></td><td>${x.flags ? `<span class="pill bad">${x.flags}</span>` : ''}</td></tr>`).join('')
     $('#i-body').querySelectorAll('tr').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
   }
@@ -264,12 +261,12 @@ async function showInterview(id, seek) {
   const secs = {}; d.texts.forEach(x => (secs[x.section] ||= []).push(x))
   const csecs = {}; d.closed.forEach(x => (csecs[x.section] ||= []).push(x))
   const canTrans = t && ['review', 'done', 'rejected'].includes(t.status)
-  openDrawer(`<h2 style="margin:0 0 4px;color:var(--navy)">${esc(d.label)} <span class="pill ${d.grp === 'trader' ? 'warn' : 'info'}">${GRP[d.grp] || ''}</span> ${d.demo ? '<span class="pill warn">demo</span>' : ''}</h2>
+  openDrawer(`<h2 style="margin:0 0 4px;color:var(--navy)">${esc(d.label)} <span class="pill ${d.grp === 'trader' ? 'warn' : 'info'}">${GRP[d.grp] || ''}</span></h2>
   <div class="mu">Interview #${d.id} &middot; ${esc(d.affiliation || '')}</div>
   <div class="kv"><div>Date<b>${d.date || '-'}</b></div><div>Duration<b>${mins(d.duration_sec)}</b></div><div>Enumerator<b>${esc(d.enumerator || '-')}</b></div><div>Audio consent<b>${d.consent_audio || '-'}</b></div><div>Photos<b>${d.photos}</b></div><div>GPS<b>${d.lat != null ? d.lat.toFixed(3) + ', ' + d.lon.toFixed(3) : 'none'}</b></div></div>
   ${d.flags.length ? `<h4>Quality flags</h4>${d.flags.map(f => `<div class="flag ${f.sev}"><i class="fa-solid fa-triangle-exclamation"></i><span>${esc(f.msg)}</span></div>`).join('')}` : ''}
   <h4>Audio &amp; transcript</h4>
-  ${d.has_audio && !d.demo ? `<audio id="player" controls preload="none" style="width:100%" ${S.key ? `src="/api/audio/${d.id}?key=${encodeURIComponent(S.key)}"` : ''}></audio>${S.key ? '' : '<button class="sm ghost" id="unlock-audio"><i class="fa-solid fa-lock"></i> Enter admin key to play audio</button>'}` : d.demo ? '<div class="mu">Demo record: no real audio.</div>' : `<div class="mu">${d.consent_audio === 'no' ? 'Respondent did not consent to audio recording.' : 'No audio attached.'}</div>`}
+  ${d.has_audio ? `<audio id="player" controls preload="none" style="width:100%" ${S.key ? `src="/api/audio/${d.id}?key=${encodeURIComponent(S.key)}"` : ''}></audio>${S.key ? '' : '<button class="sm ghost" id="unlock-audio"><i class="fa-solid fa-lock"></i> Enter admin key to play audio</button>'}` : `<div class="mu">${d.consent_audio === 'no' ? 'Respondent did not consent to audio recording.' : 'No audio attached.'}</div>`}
   ${t ? (t.text ? `<div class="mu" style="margin:6px 0">${esc(t.engine || '')} ${esc(t.model || '')} &middot; language: ${esc(t.language || '?')} &middot; confidence ${t.confidence != null ? pct(t.confidence) : '-'} &middot; status <span class="pill ${t.status === 'done' ? 'good' : t.status === 'review' ? 'warn' : 'bad'}">${t.status}</span>
     ${(t.flags || []).map(f => `<span class="pill warn">${esc(f)}</span>`).join(' ')}</div>
     ${canTrans ? `<div style="margin:6px 0;display:flex;gap:8px">${t.status !== 'done' ? '<button class="sm" data-act="accept">Accept transcript</button>' : ''}${t.status !== 'rejected' ? '<button class="sm warn" data-act="reject">Reject</button>' : ''}<button class="sm ghost" data-act="requeue">Re-transcribe</button></div>` : ''}
@@ -296,7 +293,7 @@ VIEWS.quality = async (v) => {
   v.innerHTML = `<div class="kpis">${kpi(pct(q.clean_pct), 'Clean submissions', 'no high-severity flag', 'navy')}${kpi(q.flagged.filter(f => f.high).length, 'Interviews with high-severity flags', 'review or back-check before analysis', 'red')}${kpi(q.enumerators.length, 'Enumerators', '')}</div>
   <div class="grid g2"><div class="card"><h3>Flag counts</h3><div class="sub">Rule-based checks run on every submission, mirroring the daily completeness/consistency checks in the inception report</div>${Object.entries(q.counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row"><span>${KN[k] || k}</span><div class="bar gold"><i style="width:${100 * n / mx}%"></i></div><span class="n">${n}</span></div>`).join('') || '<div class="mu">No flags raised</div>'}</div>
   <div class="card"><h3>By enumerator</h3><div class="sub">Short interviews + thin text + missing audio are the usual signs of fabricated or rushed entries</div><div class="tw" style="max-height:300px"><table><thead><tr><th>Enumerator</th><th>n</th><th>Median min</th><th>Avg words</th><th>Audio</th><th>Flagged</th></tr></thead><tbody>${q.enumerators.sort((a, b) => b.flagged - a.flagged).map(e => `<tr><td>${esc(e.enumerator)}</td><td>${e.n}</td><td>${e.median_min ?? '-'}</td><td>${e.avg_words}</td><td>${pct(e.audio_pct)}</td><td>${e.flagged ? `<span class="pill bad">${e.flagged}</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div></div>
-  <div class="card"><h3>Flagged interviews</h3><div class="sub">Click to open</div><div class="tw"><table><thead><tr><th>ID</th><th>LG</th><th>Enumerator</th><th>Date</th><th>Flags</th></tr></thead><tbody>${q.flagged.slice(0, 120).map(f => `<tr class="click" data-i="${f.id}"><td>${f.demo ? '<span class="pill warn">demo</span> ' : ''}${f.id}</td><td>${esc(f.label)}</td><td>${esc(f.enumerator || '-')}</td><td>${f.date || '-'}</td><td>${f.flags.map(x => `<span class="pill ${x.sev === 'high' ? 'bad' : x.sev === 'med' ? 'warn' : ''}" title="${esc(x.msg)}">${KN[x.k] || x.k}</span>`).join(' ')}</td></tr>`).join('') || '<tr><td colspan="5" class="mu">None</td></tr>'}</tbody></table></div></div>`
+  <div class="card"><h3>Flagged interviews</h3><div class="sub">Click to open</div><div class="tw"><table><thead><tr><th>ID</th><th>LG</th><th>Enumerator</th><th>Date</th><th>Flags</th></tr></thead><tbody>${q.flagged.slice(0, 120).map(f => `<tr class="click" data-i="${f.id}"><td>${f.id}</td><td>${esc(f.label)}</td><td>${esc(f.enumerator || '-')}</td><td>${f.date || '-'}</td><td>${f.flags.map(x => `<span class="pill ${x.sev === 'high' ? 'bad' : x.sev === 'med' ? 'warn' : ''}" title="${esc(x.msg)}">${KN[x.k] || x.k}</span>`).join(' ')}</td></tr>`).join('') || '<tr><td colspan="5" class="mu">None</td></tr>'}</tbody></table></div></div>`
   v.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
 }
 
@@ -313,7 +310,6 @@ export DASH_URL=${location.origin}
 export ADMIN_KEY=&lt;INGEST_TOKEN&gt;
 python pipeline/run.py --model small --loop</pre>
     <p class="mu" style="font-size:12px">Transcripts that look unreliable (repetition loops, very low confidence, almost no speech) are held in <b>Needs review</b> and do <u>not</u> feed the themes until a person accepts them.</p></div>
-  <div class="card"><h3><i class="fa-solid fa-flask"></i> Demo data</h3><div class="sub">Synthetic records for reviewing the dashboard before field volume exists. Always flagged <i>demo</i> and hidden unless you tick <i>Include demo data</i>.</div><p class="mu">${c.demo_rows} demo records loaded.</p><button id="b-seed" class="ghost">Load demo data</button> <button id="b-clear" class="ghost">Remove demo data</button></div>
   <div class="card"><h3><i class="fa-solid fa-download"></i> Exports</h3><div class="sub">For the evidence matrix and further analysis in Excel / NVivo / R</div>
     <p><a href="/api/export/codes.csv?${qs()}" download><button class="ghost" type="button">Coded evidence (CSV)</button></a> <a href="/api/export/submissions.csv?${qs()}" download><button class="ghost" type="button">Closed answers (CSV)</button></a></p>
     <p class="mu" style="font-size:12px">Codebook: <a href="/api/codebook" target="_blank">/api/codebook</a></p></div></div>`
@@ -321,8 +317,6 @@ python pipeline/run.py --model small --loop</pre>
   $('#b-sync').onclick = e => run(e.target, () => doSync(false))
   $('#b-force').onclick = e => run(e.target, () => doSync(true))
   $('#b-recode').onclick = e => run(e.target, async () => { let after = -1e12, n = 0; while (after !== null) { const r = await adminCall(`recode?after=${after}&limit=25`); n += r.processed; after = r.next; $('#sync-out').textContent = `Re-coded ${n} records…` } toast('Coding refreshed'); render() })
-  $('#b-seed').onclick = e => run(e.target, async () => { const r = await adminCall('demo/seed?n=80'); toast(r.ok ? `Loaded ${r.submissions} demo records` : r.error); S.cfg = await (await fetch('/api/config')).json(); render() })
-  $('#b-clear').onclick = e => run(e.target, async () => { await adminCall('demo', 'DELETE'); toast('Demo data removed'); S.cfg = await (await fetch('/api/config')).json(); render() })
 }
 async function doSync(force) {
   const out = $('#sync-out'); let total = 0
