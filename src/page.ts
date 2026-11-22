@@ -16,7 +16,7 @@ export const page = () => `<!doctype html>
 <nav id="filters">
   <label>Region <select id="f-region"><option value="">All</option></select></label>
   <label>Local government <select id="f-lg"><option value="">All</option></select></label>
-  <label>Respondent group <select id="f-grp"><option value="">All</option><option value="official">Officials</option><option value="trader">Traders</option></select></label>
+  <label>Respondent group <select id="f-grp"><option value="">All</option><option value="lg_official">LG officials (A1)</option><option value="lg_political_enforcement">Political &amp; enforcement (A2)</option><option value="trader_association">Traders' association (A3)</option><option value="national">National stakeholders (A4)</option><option value="fgd_informal_traders">FGD: informal vendors (B1)</option></select></label>
   <button id="btn-reset" class="ghost"><i class="fa-solid fa-rotate-left"></i> Reset</button>
 </nav>
 <nav id="tabs"></nav>

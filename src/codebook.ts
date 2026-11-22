@@ -61,9 +61,27 @@ export const FIELD_THEME: Record<string, string[]> = {
   h1_2: ['IMP_CONSULT'], h1_3: ['MKT_ALTERNATIVES'], h1_7: ['LRN_PRACTICE'], h1_8: ['LRN_RECOMMEND'],
   h2_1: ['IMP_CONSULT'], h2_2: ['INC_LIVELIHOOD'], h2_3: ['MKT_ALTERNATIVES'], h2_4: ['IMP_CONSULT', 'INC_GRIEVANCE'],
   h2_5: ['LRN_RECOMMEND'], h2_6: ['INC_WOMEN_YOUTH'],
+  // A2: political leaders & enforcement team
+  b3_innovation: ['LRN_PRACTICE'], b4_market_infra: ['MKT_ALTERNATIVES'], b5_allocation: ['MKT_ALTERNATIVES'],
+  c1_resources: ['IMP_RESOURCES'], c3_digital_effect: ['OSR_COLLECTION'], c4_coordination: ['IMP_COORD'],
+  d1_osr: ['OSR_COLLECTION'], d3_ppp_waste: ['URB_SANITATION'], e1_informal_impact: ['INC_LIVELIHOOD'],
+  e2_engagement: ['IMP_CONSULT', 'INC_GRIEVANCE'], f1_political: ['GOV_POLITICAL'], f2_legal: ['GOV_LAW'], f3_recommendations: ['LRN_RECOMMEND'],
+  // A3: traders' association (open text)
+  f3_comments: ['LRN_RECOMMEND'],
+  // A4: national stakeholders
+  b1_policy_alignment: ['GOV_CENTRAL'], b3_decentralization: ['GOV_CENTRAL'], c1_coordination: ['IMP_COORD'], c2_bottlenecks: ['GOV_LAW'],
+  c3_support: ['IMP_RESOURCES'], d1_digital: ['OSR_COLLECTION'], d2_market_infra: ['MKT_ALTERNATIVES'], d3_osr: ['OSR_COLLECTION'],
+  e1_political: ['GOV_POLITICAL'], e2_judicial: ['GOV_LAW'], e3_recommendations: ['LRN_RECOMMEND'],
+  // B1: FGD with informal vendors / relocated traders
+  m1_prior_notice: ['IMP_CONSULT'], m1_consultation: ['IMP_CONSULT'], m1_understanding: ['IMP_CONSULT'], m2_income: ['INC_LIVELIHOOD'],
+  m2_fees: ['MKT_AFFORD'], m2_vulnerable: ['INC_WOMEN_YOUTH'], m3_stalls: ['MKT_ALTERNATIVES'], m3_allocation: ['MKT_ALTERNATIVES'],
+  m3_amenities: ['MKT_ALTERNATIVES'], m4_conduct: ['IMP_FORCE'], m4_fairness: ['IMP_CONSISTENCY'], m4_events: ['INC_LIVELIHOOD'],
+  m5_barriers: ['MKT_LICENSING'], m5_waste_grievance: ['INC_GRIEVANCE', 'URB_SANITATION'], m5_recommendations: ['LRN_RECOMMEND'],
 }
 // Free-text fields that are never coded or shown (identifiers)
-export const SKIP_TEXT = new Set(['respondent_name', 'enumerator_id'])
+export const SKIP_TEXT = new Set(['respondent_name', 'enumerator_id', 'interviewee_name', 'interviewer_names', 'facilitator', 'note_taker',
+  'designation', 'interviewee_designation', 'interviewee_role_other', 'institution_other', 'activity_other', 'respondent_affiliation_other',
+  'trading_location', 'venue'])
 
 const POS = /\b(improv|better|success|effective|clean(?:er|ed)?|reduc\w* (?:congestion|jam)|increas|cooperat|co-operat|support|good|helpful|organi[sz]ed|adequate|complian|orderly|worked well|benefit|progress|positive|gain|appreciat|accept)/gi
 const NEG = /\b(fail|poor|worse|resist|lack|insufficient|inadequate|corrupt|harass|brutal|loss|lost|declin|drop|conflict|interfer|expensive|unaffordable|too far|hunger|suffer|complain|weak|delay|shortage|confiscat|violen|unrest|tension|struggl|difficult|problem|reluctan|refus|unclear|injunction)/gi
@@ -87,7 +105,7 @@ export function isSubstantive(s: string) { return wordCount(s) >= 3 && s.trim().
 
 export function evidenceFor(field: string, text: string): string {
   if (field === 'audio') return 'reported'
-  if (field === 'enumerator_summary') return 'inferred'
+  if (field === 'enumerator_summary' || field === 'interviewer_summary' || field === 'fgd_summary') return 'inferred'
   if (/_evidence$/.test(field)) {
     if (/\b(report|register|records?|statements?|logs?|ifms|minutes|files?|returns|data\b|receipts?|inventory|census|portal|dashboard|ledger)/i.test(text)) return 'documented'
     if (/\b(observ|visual|saw\b|seen\b|walk(?:ed|through)|physically|site visit)/i.test(text)) return 'observed'

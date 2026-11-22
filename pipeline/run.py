@@ -52,11 +52,16 @@ def quality(segs, duration, lang_prob, wanted_lang):
     full = " ".join(texts)
     toks = re.findall(r"[a-z']+", full)
     if len(toks) >= 30:
-        ratio = len(full.encode()) / max(1, len(zlib.compress(full.encode())))
+        # compression ratio is measured on 600-character windows: a whole long transcript of ordinary speech
+        # compresses ~2.4x, whereas a genuine hallucination loop spikes a local window well above 3
+        ratio = len(full.encode()) / max(1, len(zlib.compress(full.encode()))) if len(full) < 700 else 0.0
+        for i in range(0, max(1, len(full) - 600), 300):
+            b = full[i:i + 600].encode()
+            ratio = max(ratio, len(b) / max(1, len(zlib.compress(b))))
         grams = collections.Counter(tuple(toks[i:i + 3]) for i in range(len(toks) - 2))
         top_share = grams.most_common(1)[0][1] / max(1, len(toks) - 2)
         distinct = len(set(toks)) / len(toks)
-        if ratio > 2.4 or top_share > 0.2 or distinct < 0.12:
+        if ratio > 3.0 or top_share > 0.2 or distinct < 0.12:
             if "repetition" not in flags:
                 flags.append("repetition")
     conf = float(np.mean([s["conf"] for s in segs])) if segs else 0.0
@@ -73,7 +78,7 @@ def quality(segs, duration, lang_prob, wanted_lang):
 def transcribe(model, path, language):
     audio = decode(path)
     duration = len(audio) / 16000
-    segs_iter, info = model.transcribe(audio, beam_size=5, language=language, vad_filter=True,
+    segs_iter, info = model.transcribe(audio, beam_size=int(os.environ.get("WHISPER_BEAM", "2")), language=language, vad_filter=True,
                                        condition_on_previous_text=False, temperature=0.0,
                                        compression_ratio_threshold=2.2, no_speech_threshold=0.6)
     segs = []

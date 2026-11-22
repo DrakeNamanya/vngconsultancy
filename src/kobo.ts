@@ -18,21 +18,27 @@ export function forms(env: Env): { uid: string; kind: string }[] {
 
 const label = (l: any) => Array.isArray(l) ? (l[0] ?? '') : (l ?? '')
 
-// Trimmed schema: question name -> {t:type, l:label, list, sec}, choices: list -> {value: label}
+// Trimmed schema: question name -> {t:type, l:label, list, sec}, choices (only lists in use), order, meta {code, group}
 export function buildSchema(asset: any) {
   const q: Record<string, any> = {}, ch: Record<string, Record<string, string>> = {}, order: string[] = []
   const stack: string[] = []
+  const meta: any = { code: '', group: '' }
+  const used = new Set<string>()
   for (const r of asset.content?.survey || []) {
     const n = r.name || r.$autoname
     if (r.type === 'begin_group' || r.type === 'begin_repeat') { stack.push(label(r.label) || n); continue }
     if (r.type === 'end_group' || r.type === 'end_repeat') { stack.pop(); continue }
     if (!n) continue
+    if (n === 'form_code') meta.code = String(r.calculation || '').replace(/['"]/g, '')
+    if (n === 'respondent_group' || n === 'resp_group') meta.group = String(r.calculation || '').replace(/['"]/g, '')
     const type = String(r.type).split(' ')[0]
-    q[n] = { t: type, l: label(r.label), list: r.select_from_list_name || (String(r.type).split(' ')[1] || undefined), sec: stack[0] || '' }
+    const list = r.select_from_list_name || (String(r.type).split(' ')[1] || undefined)
+    q[n] = { t: type, l: label(r.label), list, sec: [...stack].reverse().find(x => /^(Section|Module)\b/.test(x)) || stack[0] || '' }
+    if (list) used.add(list)
     order.push(n)
   }
-  for (const c of asset.content?.choices || []) (ch[c.list_name] ||= {})[c.name] = label(c.label)
-  return { q, ch, order }
+  for (const c of asset.content?.choices || []) if (used.has(c.list_name)) (ch[c.list_name] ||= {})[c.name] = label(c.label)
+  return { q, ch, order, meta }
 }
 
 export async function fetchAsset(env: Env, uid: string) {
@@ -55,6 +61,15 @@ export async function fetchAllData(env: Env, uid: string) {
   return out
 }
 
+export const GROUP_ALIAS: Record<string, string> = { official: 'lg_official', trader: 'trader_association' }
+function affiliation(flat: any, schema: any): string | null {
+  for (const k of ['respondent_affiliation', 'institution', 'interviewee_role', 'activity_type', 'fgd_group_type']) {
+    const v = flat[k]; if (!v) continue
+    const list = schema.q[k]?.list
+    return (list && schema.ch[list]?.[v]) || String(v)
+  }
+  return null
+}
 const last = (k: string) => k.split('/').pop() as string
 const num = (v: any) => { if (v === undefined || v === null || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null }
 
@@ -85,9 +100,11 @@ export function normalise(form: { uid: string; kind: string }, raw: any, schema:
     else answers[k] = (t === 'integer' || t === 'decimal') ? num(v) : v
   }
   if (captions.length) texts['photo_caption'] = captions.join(' | ')
-  const att = (raw._attachments || []).find((a: any) => !a.is_deleted && String(a.mimetype || '').startsWith('audio'))
+  const atts = (raw._attachments || []).filter((a: any) => !a.is_deleted)
+  const att = atts.find((a: any) => /(interview_audio|fgd_audio)/.test(a.question_xpath || '') && String(a.mimetype || '').startsWith('audio'))
+    || atts.find((a: any) => String(a.mimetype || '').startsWith('audio'))
   const geo = Array.isArray(raw._geolocation) ? raw._geolocation : []
-  const consent = flat.consent_interview ?? null
+  const consent = flat.consent_interview ?? flat.consent_fgd ?? null
   const caud = flat.consent_audio ?? null
   const started = raw.start || null, ended = raw.end || null
   const dur = started && ended ? Math.max(0, Math.round((Date.parse(ended) - Date.parse(started)) / 1000)) : null
@@ -98,9 +115,9 @@ export function normalise(form: { uid: string; kind: string }, raw: any, schema:
   return {
     id: raw._id, form_uid: form.uid, uuid: raw._uuid || raw['meta/instanceID'] || null, kind: form.kind,
     submitted_at: raw._submission_time || null, started_at: started, ended_at: ended, duration_sec: dur,
-    interview_date: flat.interview_date || raw.today || null,
+    interview_date: flat.interview_date || flat.fgd_date || raw.today || null,
     region: flat.region || null, lg: flat.lg_name || null, lg_category: flat.lg_category || null,
-    affiliation: flat.respondent_affiliation || null, grp: flat.resp_group || null,
+    affiliation: affiliation(flat, schema), grp: GROUP_ALIAS[flat.respondent_group || flat.resp_group] || flat.respondent_group || flat.resp_group || schema.meta?.group || null,
     enumerator_id: flat.enumerator_id ? String(flat.enumerator_id).trim() : null,
     consent_interview: consent, consent_audio: caud,
     lat: num(geo[0]), lon: num(geo[1]),

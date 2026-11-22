@@ -40,7 +40,8 @@ function kill() { S.charts.forEach(c => c.destroy()); S.charts = [] }
 function chart(id, cfg) { const el = document.getElementById(id); if (!el) return; const c = new Chart(el, cfg); S.charts.push(c); return c }
 const empty = (t, d) => `<div class="empty"><b>${t}</b>${d || ''}</div>`
 const opt = (arr, sel) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('')
-const GRP = { official: 'Official', trader: 'Trader' }
+const GRP = { lg_official: 'LG official', lg_political_enforcement: 'Political / enforcement', trader_association: "Traders' assoc.", national: 'National', fgd_informal_traders: 'FGD informal vendors', official: 'Official', trader: 'Trader' }
+const isTrader = g => g === 'trader' || g === 'trader_association' || (g || '').startsWith('fgd')
 const EVID = { documented: 'info', observed: 'teal', reported: '', inferred: 'warn' }
 
 async function init() {
@@ -85,8 +86,8 @@ VIEWS.overview = async (v) => {
   const eligible = (o.consented) - (a.declined || 0)
   v.innerHTML = `
   <div class="kpis">
-    ${kpi(o.consented, 'Interviews (consented)', `${o.declined} declined &middot; ${o.by_group.official || 0} officials / ${o.by_group.trader || 0} traders`)}
-    ${kpi(`${o.lgs_covered}/${o.lgs_total}`, 'Local governments reached', `${S.cfg.targets.officials_per_lg + S.cfg.targets.traders_per_lg} interviews targeted per LG`, 'navy')}
+    ${kpi(o.consented, 'Interviews (consented)', `${o.declined} declined &middot; ${Object.entries(o.by_group).map(([g, n]) => n + ' ' + (GRP[g] || g)).join(' &middot; ') || 'none yet'}`)}
+    ${kpi(`${o.lgs_covered}/${o.lgs_total}`, 'Local governments reached', `${S.cfg.targets.officials_per_lg + S.cfg.targets.traders_per_lg} KIIs + ${S.cfg.targets.fgd_per_lg} FGDs targeted per LG`, 'navy')}
     ${kpi(`${audioN}`, 'Audio transcribed', `${a.pending || 0} pending &middot; ${a.review || 0} in review &middot; ${a.failed || 0} failed`, 'gold')}
     ${kpi(fmt(o.codes.total), 'Coded evidence segments', `${o.codes.themes}/${o.codes.themes_total} themes seen &middot; ${o.codes.submissions} interviews coded`)}
     ${kpi(fmt(o.words), 'Words of open-ended text', o.median_duration_min ? `median interview ${o.median_duration_min} min` : '')}
@@ -109,12 +110,13 @@ const audioLegend = a => Object.keys(AUD).filter(k => a[k]).map(k => `<span><i s
 
 VIEWS.coverage = async (v) => {
   const c = await api('coverage')
-  if (!c.rows.some(r => r.officials + r.traders)) { v.innerHTML = empty('No coverage data yet', 'Targets: ' + c.targets.officials + ' official KIIs + ' + c.targets.traders + ' trader KIIs per LG.'); return }
+  if (!c.rows.some(r => r.officials + r.traders + r.fgds) && !c.national) { v.innerHTML = empty('No coverage data yet', 'Targets per LG: ' + c.targets.officials + ' official KIIs + ' + c.targets.traders + ' trader KIIs + ' + c.targets.fgds + ' FGDs.'); return }
   const rows = c.rows.filter(r => (!S.f.region || r.region === S.f.region) && (!S.f.lg || r.code === S.f.lg))
-  v.innerHTML = `<div class="hint">Targets from the inception report: <b>${c.targets.officials} official KIIs</b> and <b>${c.targets.traders} trader KIIs</b> per local government (plus 2 FGDs per LG, tracked once the FGD form is connected). Overall progress: <b>${c.achieved}/${c.target_total}</b> target interviews (${pct(c.achieved / c.target_total)}).</div>
-  <div class="card"><div class="tw"><table><thead><tr><th>Local government</th><th>Region</th><th>Officials</th><th>Traders</th><th style="min-width:160px">Progress</th><th>Audio done</th><th>Declined</th></tr></thead><tbody>
+  const cell = (n, t) => `${n}/${t} ${n >= t ? '<span class="pill good">&check;</span>' : ''}`
+  v.innerHTML = `<div class="hint">Targets from the inception report, per local government: <b>${c.targets.officials} official KIIs</b> (forms A1 + A2), <b>${c.targets.traders} trader KIIs</b> (A3) and <b>${c.targets.fgds} FGDs</b> (B1). Overall progress: <b>${c.achieved}/${c.target_total}</b> (${pct(c.achieved / c.target_total)}). National-level stakeholder interviews (A4, not tied to an LG): <b>${c.national}</b>.</div>
+  <div class="card"><div class="tw"><table><thead><tr><th>Local government</th><th>Region</th><th>Officials (A1+A2)</th><th>Traders (A3)</th><th>FGDs (B1)</th><th style="min-width:150px">Progress</th><th>Audio done</th><th>Declined</th></tr></thead><tbody>
   ${rows.map(r => `<tr class="click" data-lg="${r.code}"><td><b>${esc(r.label)}</b></td><td>${esc(regName(r.region))}</td>
-   <td>${r.officials}/${c.targets.officials} ${r.officials >= c.targets.officials ? '<span class="pill good">complete</span>' : ''}</td><td>${r.traders}/${c.targets.traders} ${r.traders >= c.targets.traders ? '<span class="pill good">complete</span>' : ''}</td>
+   <td>${cell(r.officials, c.targets.officials)} <span class="mu">(${r.a1}+${r.a2})</span></td><td>${cell(r.traders, c.targets.traders)}</td><td>${cell(r.fgds, c.targets.fgds)}</td>
    <td><div class="row" style="grid-template-columns:1fr 40px;margin:0"><div class="bar ${r.pct >= 100 ? '' : 'gold'}"><i style="width:${r.pct}%"></i></div><span class="n">${r.pct}%</span></div></td><td>${r.audio_done}/${r.audio_total}</td><td>${r.declined || ''}</td></tr>`).join('')}
   </tbody></table></div></div>`
   v.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => { S.f.lg = tr.dataset.lg; $('#f-lg').value = tr.dataset.lg; S.tab = 'interviews'; location.hash = 'interviews'; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'interviews')); render() })
@@ -193,26 +195,32 @@ VIEWS.evidence = async (v) => {
 }
 
 VIEWS.quant = async (v) => {
-  const d = await api('quant')
-  if (!d.n) { v.innerHTML = empty('No closed-question data yet', 'Charts appear once consented interviews are synced.'); return }
+  const d = await api('quant', S.qform ? { form: S.qform } : {})
+  S.qform = d.form || ''
+  if (!d.form || !d.n) {
+    v.innerHTML = qpick(d) + empty('No closed-question data for this form yet', 'Charts appear once consented interviews on this form are synced. Pick another form above.')
+    qbind(v); return
+  }
   const secs = [...new Set(d.questions.map(q => q.section))]
-  v.innerHTML = `<div class="hint">Closed questions from the Kobo form, split by respondent group. Likert items show the mean (1 = lowest, 5 = highest). Section A-H labels follow the questionnaire. Multi-select questions can add up to more than 100%. n = respondents who answered.</div>` +
-    secs.map(sec => `<h3 style="color:var(--navy);margin:18px 0 8px">${esc(sec || 'Other')}</h3><div class="grid g2">${d.questions.filter(q => q.section === sec).map(q => qcard(q)).join('')}</div>`).join('')
+  v.innerHTML = qpick(d) + `<div class="hint">Closed questions for the selected form, split by respondent group. Likert items (1-5) show the mean. Multi-select questions can add up to more than 100%. n = ${d.n} consented interview${d.n === 1 ? '' : 's'} on this form.</div>` +
+    (d.questions.length ? secs.map(sec => `<h3 style="color:var(--navy);margin:18px 0 8px">${esc(sec || 'Other')}</h3><div class="grid g2">${d.questions.filter(q => q.section === sec).map(q => qcard(q)).join('')}</div>`).join('') : empty('This form has no closed (choice) questions', 'Its answers are open-ended: see Themes and Evidence & quotes.'))
   d.questions.forEach(q => qchart(q))
+  qbind(v)
 }
+const qpick = d => `<div class="toolbar"><label>Form<select id="q-form">${(d.forms || []).map(f => `<option value="${f.uid}" ${f.uid === d.form ? 'selected' : ''}>${esc(f.code)} &middot; ${esc(f.name)} (${f.n})</option>`).join('')}</select></label></div>`
+const qbind = v => { const el = $('#q-form'); if (el) el.onchange = e => { S.qform = e.target.value; render() } }
 function qcard(q) {
   const lik = q.likert
-  return `<div class="card"><h3 style="font-size:14px">${esc(q.label)}</h3><div class="sub">n = ${q.n}${lik && lik.mean != null ? ` &middot; mean <b>${lik.mean.toFixed(2)}</b> (officials ${lik.official?.toFixed(2) ?? '-'}, traders ${lik.trader?.toFixed(2) ?? '-'})` : ''}</div>${q.n ? `<canvas id="q-${q.key}" style="max-height:${Math.max(120, q.options.length * 30 + 40)}px"></canvas>` : '<div class="mu">No answers yet</div>'}</div>`
+  return `<div class="card"><h3 style="font-size:14px">${esc(q.label)}</h3><div class="sub">n = ${q.n}${lik && lik.mean != null ? ` &middot; mean <b>${lik.mean.toFixed(2)}</b>` : ''}</div>${q.n ? `<canvas id="q-${q.key}" style="max-height:${Math.max(120, q.options.length * 30 + 40)}px"></canvas>` : '<div class="mu">No answers yet</div>'}</div>`
 }
 function qchart(q) {
   if (!q.n) return
   const short = l => l.length > 46 ? l.slice(0, 44) + '…' : l
-  // denominator = respondents in that group who answered this question (so multi-select shares are "% of respondents")
   const share = (o, tot) => q.options.map(x => tot ? +(100 * (o[x.v] || 0) / tot).toFixed(0) : 0)
+  const cols = [COL.blue, COL.gold, COL.teal, COL.red, COL.grey]
+  const groups = Object.keys(q.byGrp)
   chart('q-' + q.key, {
-    type: 'bar', data: { labels: q.options.map(x => short(x.label)), datasets: [
-      { label: `Officials (n=${q.nGrp.official})`, data: share(q.byGrp.official, q.nGrp.official), backgroundColor: COL.blue },
-      { label: `Traders (n=${q.nGrp.trader})`, data: share(q.byGrp.trader, q.nGrp.trader), backgroundColor: COL.gold }] },
+    type: 'bar', data: { labels: q.options.map(x => short(x.label)), datasets: groups.map((g, i) => ({ label: `${GRP[g] || g} (n=${q.nGrp[g] || 0})`, data: share(q.byGrp[g], q.nGrp[g]), backgroundColor: cols[i % cols.length] })) },
     options: { indexAxis: 'y', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } }, scales: { x: { max: 100, ticks: { callback: v => v + '%' } }, y: { ticks: { font: { size: 10.5 } } } } }
   })
 }
@@ -240,12 +248,12 @@ VIEWS.interviews = async (v) => {
   const r = await api('interviews')
   if (!r.items.length) { v.innerHTML = empty('No interviews in this view', 'Sync from KoboToolbox in the Pipeline tab.'); return }
   v.innerHTML = `<div class="toolbar"><label>Audio status<select id="i-aud"><option value="">All</option>${opt(Object.entries(AUD).map(([k, x]) => [k, x[0]]), '')}</select></label><label>Search<input type="search" id="i-q" placeholder="LG, enumerator, id"></label><span class="mu" id="i-n"></span></div>
-  <div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>Local government</th><th>Group</th><th>Date</th><th>Duration</th><th>Enumerator</th><th>Words</th><th>Codes</th><th>Audio</th><th>Flags</th></tr></thead><tbody id="i-body"></tbody></table></div></div>`
+  <div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>Form</th><th>Where / who</th><th>Group</th><th>Date</th><th>Duration</th><th>Enumerator</th><th>Words</th><th>Codes</th><th>Audio</th><th>Flags</th></tr></thead><tbody id="i-body"></tbody></table></div></div>`
   const draw = () => {
     const a = $('#i-aud').value, q = $('#i-q').value.toLowerCase()
     const rows = r.items.filter(x => (!a || x.audio === a) && (!q || (x.label + ' ' + (x.enumerator || '') + ' ' + x.id).toLowerCase().includes(q)))
     $('#i-n').textContent = rows.length + ' interviews'
-    $('#i-body').innerHTML = rows.map(x => `<tr class="click" data-i="${x.id}"><td>${x.id}</td><td><b>${esc(x.label)}</b></td><td>${GRP[x.grp] || '-'}</td><td>${x.date || '-'}</td><td>${mins(x.duration_sec)}</td><td>${esc(x.enumerator || '-')}</td><td>${x.words}</td><td>${x.codes}</td>
+    $('#i-body').innerHTML = rows.map(x => `<tr class="click" data-i="${x.id}"><td>${x.id}</td><td><span class="pill" title="${esc(x.form_name || '')}">${esc(x.form || '')}</span></td><td><b>${esc(x.label)}</b></td><td>${GRP[x.grp] || '-'}</td><td>${x.date || '-'}</td><td>${mins(x.duration_sec)}</td><td>${esc(x.enumerator || '-')}</td><td>${x.words}</td><td>${x.codes}</td>
       <td><span class="pill" style="background:${AUD[x.audio]?.[1] || '#eee'}22;color:${AUD[x.audio]?.[1] || '#555'}">${x.consent === 'no' ? 'declined interview' : (AUD[x.audio]?.[0] || x.audio)}</span></td><td>${x.flags ? `<span class="pill bad">${x.flags}</span>` : ''}</td></tr>`).join('')
     $('#i-body').querySelectorAll('tr').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
   }
@@ -261,8 +269,8 @@ async function showInterview(id, seek) {
   const secs = {}; d.texts.forEach(x => (secs[x.section] ||= []).push(x))
   const csecs = {}; d.closed.forEach(x => (csecs[x.section] ||= []).push(x))
   const canTrans = t && ['review', 'done', 'rejected'].includes(t.status)
-  openDrawer(`<h2 style="margin:0 0 4px;color:var(--navy)">${esc(d.label)} <span class="pill ${d.grp === 'trader' ? 'warn' : 'info'}">${GRP[d.grp] || ''}</span></h2>
-  <div class="mu">Interview #${d.id} &middot; ${esc(d.affiliation || '')}</div>
+  openDrawer(`<h2 style="margin:0 0 4px;color:var(--navy)">${esc(d.label)} <span class="pill ${isTrader(d.grp) ? 'warn' : 'info'}">${GRP[d.grp] || ''}</span></h2>
+  <div class="mu">${esc(d.form_name || '')} &middot; #${d.id}${d.affiliation && d.affiliation !== d.label ? ' &middot; ' + esc(d.affiliation) : ''}</div>
   <div class="kv"><div>Date<b>${d.date || '-'}</b></div><div>Duration<b>${mins(d.duration_sec)}</b></div><div>Enumerator<b>${esc(d.enumerator || '-')}</b></div><div>Audio consent<b>${d.consent_audio || '-'}</b></div><div>Photos<b>${d.photos}</b></div><div>GPS<b>${d.lat != null ? d.lat.toFixed(3) + ', ' + d.lon.toFixed(3) : 'none'}</b></div></div>
   ${d.flags.length ? `<h4>Quality flags</h4>${d.flags.map(f => `<div class="flag ${f.sev}"><i class="fa-solid fa-triangle-exclamation"></i><span>${esc(f.msg)}</span></div>`).join('')}` : ''}
   <h4>Audio &amp; transcript</h4>
@@ -299,11 +307,13 @@ VIEWS.quality = async (v) => {
 
 VIEWS.pipeline = async (v) => {
   const o = await api('overview', { region: '', lg: '', grp: '' })
+  const fm = (await (await fetch('/api/forms')).json()).forms
   const c = S.cfg
   v.innerHTML = `<div class="grid g2">
-  <div class="card"><h3><i class="fa-solid fa-cloud-arrow-down"></i> 1 &middot; Sync KoboToolbox</h3><div class="sub">Pulls new submissions (data + audio links), codes the open-ended text. Safe to re-run: existing records are skipped.</div>
+  <div class="card"><h3><i class="fa-solid fa-cloud-arrow-down"></i> 1 &middot; Sync KoboToolbox</h3><div class="sub">Pulls new submissions from every connected form (data + audio links) and codes the open-ended text. Safe to re-run: existing records are skipped, and records deleted on Kobo are removed here.</div>
     <p class="mu">Connection: ${c.kobo_configured ? '<span class="pill good">token configured</span>' : '<span class="pill bad">KOBO_TOKEN missing</span>'} &middot; admin key ${c.admin_configured ? '<span class="pill good">set</span>' : '<span class="pill bad">INGEST_TOKEN missing</span>'}<br>Last sync: ${c.last_sync ? new Date(c.last_sync).toLocaleString() : 'never'} &middot; ${c.real_rows} live records</p>
     <button id="b-sync"><i class="fa-solid fa-rotate"></i> Sync now</button> <button id="b-force" class="ghost">Re-import everything</button> <button id="b-recode" class="ghost">Re-run coding</button><div id="sync-out" class="mu" style="margin-top:8px"></div></div>
+  <div class="card" style="grid-column:1/-1"><h3><i class="fa-solid fa-list-check"></i> Connected KoboToolbox forms</h3><div class="sub">Each form is fetched with its own question set. Kobo count = submissions on the server; in dashboard = imported.</div><div class="tw"><table><thead><tr><th>Code</th><th>Form</th><th>Type</th><th>Kobo</th><th>In dashboard</th><th>With audio</th><th>Status</th></tr></thead><tbody>${fm.map(f => `<tr><td><span class="pill">${esc(f.code || '?')}</span></td><td>${esc(f.name)}<div class="mu" style="font-size:11px">${f.uid}</div></td><td>${f.kind.toUpperCase()}</td><td>${f.kobo_count ?? '-'}</td><td>${f.in_dashboard}</td><td>${f.with_audio}</td><td>${!f.synced ? '<span class="pill warn">not synced yet</span>' : f.kobo_count === 0 ? '<span class="pill">empty on Kobo</span>' : f.in_dashboard >= f.kobo_count ? '<span class="pill good">up to date</span>' : '<span class="pill warn">' + (f.kobo_count - f.in_dashboard) + ' to import</span>'}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card"><h3><i class="fa-solid fa-waveform-lines"></i> 2 &middot; Audio transcription</h3><div class="sub">Runs outside the dashboard: audio is too heavy for the edge runtime.</div>${audioBar(o.audio)}<div class="legend">${audioLegend(o.audio)}</div>
     <p style="font-size:12.5px">Run on any machine with Python 3.9+ and ffmpeg:</p><pre>pip install faster-whisper numpy requests
 export DASH_URL=${location.origin}
@@ -324,7 +334,7 @@ async function doSync(force) {
     const r = await adminCall(`sync?limit=15${force ? '&force=1&offset=' + total : ''}`)
     if (r.error) { out.textContent = r.error; return }
     total += r.processed
-    out.textContent = `Imported ${total} of ${r.kobo_total}${r.remaining ? ', ' + r.remaining + ' remaining' : ''}${r.errors?.length ? ' · ' + r.errors.join('; ') : ''}`
+    out.textContent = `Imported ${total} of ${r.kobo_total}${r.removed ? ', removed ' + r.removed + ' deleted on Kobo' : ''}${r.remaining ? ', ' + r.remaining + ' remaining' : ''}${r.errors?.length ? ' · ' + r.errors.join('; ') : ''}`
     if (!r.remaining || !r.processed) break
   }
   toast(`Sync complete: ${total} records`); S.cfg = await (await fetch('/api/config')).json(); syncInfo(); render()

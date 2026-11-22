@@ -12,7 +12,20 @@ app.use('/api/*', cors())
 const J = (s: any, d: any = null) => { try { return s ? JSON.parse(s) : d } catch { return d } }
 const LG_BY: Record<string, any> = Object.fromEntries((LGS as any[]).map(l => [l.code, l]))
 const lgLabel = (c: string) => LG_BY[c]?.label || c
-const qlabel = (k: string) => (S.q[k]?.l || k).replace(/^[A-H]\d+[a-z]?\.\s*/, '').replace(/\s*\(.*$/, '').slice(0, 140)
+const qlabel = (fs: any, k: string) => (fs?.q?.[k]?.l || k).replace(/^[A-H]\d+(?:\.\d+)?[a-z]?\.\s*/, '').replace(/\s*\(.*$/, '').slice(0, 140)
+type FS = { uid: string; kind: string; name: string; q: any; ch: any; meta: any; order: string[] }
+async function formSchemas(c: any): Promise<Record<string, FS>> {
+  const rows = (await c.env.DB.prepare('SELECT uid,kind,name,schema FROM forms').all()).results as any[]
+  const m: Record<string, FS> = {}
+  for (const r of rows) { const sc = J(r.schema, {}); m[r.uid] = { uid: r.uid, kind: r.kind, name: r.name || r.uid, q: sc.q || {}, ch: sc.ch || {}, meta: sc.meta || {}, order: sc.order || Object.keys(sc.q || {}) } }
+  return m
+}
+const shortName = (n: string) => (n || '').replace(/\s*\(Trade Order Study\)\s*$/, '')
+const whereLabel = (s: any, fs?: FS) => s.lg ? lgLabel(s.lg) : (s.affiliation || (s.grp === 'national' ? 'National stakeholder' : s.consent_interview === 'no' ? 'LG not recorded (declined)' : 'LG not recorded'))
+// Respondent groups (set by the form): which side of the official-vs-trader comparison they belong to
+const TRADER_GRP = new Set(['trader_association', 'fgd_informal_traders', 'trader'])
+const side = (g: string) => (TRADER_GRP.has(g) || String(g || '').startsWith('fgd') ? 'trader' : 'official')
+const THIN: Record<string, number> = { lg_official: 80, lg_political_enforcement: 80, national: 80, trader_association: 15, fgd_informal_traders: 100 }
 
 // ---------- auth for write endpoints ----------
 const admin = async (c: any, next: any) => {
@@ -65,7 +78,7 @@ app.post('/api/sync', admin, async (c) => {
   const fl = forms(env)
   if (!fl.length) return c.json({ error: 'KOBO_FORMS not configured' }, 400)
   const have = new Set<number>((await env.DB.prepare('SELECT id FROM submissions WHERE is_demo=0').all()).results.map((r: any) => r.id))
-  let processed = 0, remaining = 0, total = 0
+  let processed = 0, remaining = 0, total = 0, removed = 0
   const errors: string[] = []
   for (const f of fl) {
     try {
@@ -73,9 +86,12 @@ app.post('/api/sync', admin, async (c) => {
       const schema = buildSchema(asset)
       await env.DB.prepare(`INSERT INTO forms (uid,kind,name,schema,last_sync,submission_count) VALUES (?,?,?,?,?,?)
         ON CONFLICT(uid) DO UPDATE SET kind=excluded.kind,name=excluded.name,schema=excluded.schema,last_sync=excluded.last_sync,submission_count=excluded.submission_count`)
-        .bind(f.uid, f.kind, asset.name, JSON.stringify({ q: schema.q }), new Date().toISOString(), asset.deployment__submission_count ?? 0).run()
+        .bind(f.uid, f.kind, asset.name, JSON.stringify({ q: schema.q, ch: schema.ch, meta: schema.meta, order: schema.order }), new Date().toISOString(), asset.deployment__submission_count ?? 0).run()
       const data = await fetchAllData(env, f.uid)
       total += data.length
+      const live = new Set<number>(data.map((r: any) => r._id))
+      const gone = ((await env.DB.prepare('SELECT id FROM submissions WHERE form_uid=?').bind(f.uid).all()).results as any[]).map(r => r.id).filter((id: number) => !live.has(id))
+      for (const id of gone) { await env.DB.batch([env.DB.prepare('DELETE FROM codes WHERE submission_id=?').bind(id), env.DB.prepare('DELETE FROM transcripts WHERE submission_id=?').bind(id), env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id)]); removed++ }
       const off = Math.max(0, Number(c.req.query('offset') || 0))
       const todo = force ? data.slice(off) : data.filter(r => !have.has(r._id))
       const batch = todo.slice(0, Math.max(0, limit - processed))
@@ -98,7 +114,7 @@ app.post('/api/sync', admin, async (c) => {
     } catch (e: any) { errors.push(String(e.message || e)) }
   }
   await env.DB.prepare(`INSERT INTO meta (key,value) VALUES ('last_sync',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind(new Date().toISOString()).run()
-  return c.json({ ok: !errors.length, processed, remaining, kobo_total: total, errors })
+  return c.json({ ok: !errors.length, processed, remaining, removed, kobo_total: total, errors })
 })
 
 // Re-run the coding engine over stored text + accepted transcripts (after a codebook change)
@@ -202,14 +218,23 @@ app.get('/api/audio/:id', async (c) => {
 
 
 // ---------- read APIs ----------
+const GROUP_LABELS: Record<string, string> = { lg_official: 'LG officials', lg_political_enforcement: 'Political & enforcement', trader_association: "Traders' association", national: 'National stakeholders', fgd_informal_traders: 'FGD: informal vendors' }
+app.get('/api/forms', async (c) => {
+  const fs = await formSchemas(c)
+  const cnt: any = {}; (await c.env.DB.prepare('SELECT form_uid, COUNT(*) n, SUM(CASE WHEN audio_url IS NOT NULL THEN 1 ELSE 0 END) a FROM submissions GROUP BY form_uid').all()).results.forEach((r: any) => cnt[r.form_uid] = r)
+  const kobo: any = {}; (await c.env.DB.prepare('SELECT uid,last_sync,submission_count FROM forms').all()).results.forEach((r: any) => kobo[r.uid] = r)
+  const list = forms(c.env).map(f => ({ uid: f.uid, kind: f.kind, code: fs[f.uid]?.meta?.code || '', group: fs[f.uid]?.meta?.group || '', name: shortName(fs[f.uid]?.name || f.uid), synced: !!fs[f.uid], kobo_count: kobo[f.uid]?.submission_count ?? null, in_dashboard: cnt[f.uid]?.n || 0, with_audio: cnt[f.uid]?.a || 0, last_sync: kobo[f.uid]?.last_sync || null }))
+  return c.json({ forms: list })
+})
 app.get('/api/config', async (c) => {
   const lastSync = await c.env.DB.prepare("SELECT value FROM meta WHERE key='last_sync'").first<any>()
   const realN = await c.env.DB.prepare('SELECT COUNT(*) n FROM submissions WHERE is_demo=0').first<any>()
   return c.json({
-    lgs: LGS, regions: S.ch.region, affil: S.ch.affil, last_sync: lastSync?.value || null, real_rows: realN?.n || 0,
+    lgs: LGS, regions: S.ch.region, last_sync: lastSync?.value || null, real_rows: realN?.n || 0,
     dimensions: DIMENSIONS, objectives: OBJECTIVES, themes: THEMES.map(t => ({ code: t.code, label: t.label, dim: t.dim })),
     kobo_configured: !!c.env.KOBO_TOKEN, admin_configured: !!c.env.INGEST_TOKEN,
     targets: { officials_per_lg: 4, traders_per_lg: 2, fgd_per_lg: 2 },
+    groups: GROUP_LABELS,
   })
 })
 
@@ -237,60 +262,65 @@ app.get('/api/overview', async (c) => {
 
 app.get('/api/coverage', async (c) => {
   const subs = await loadSubs(c)
-  const T = { officials: 4, traders: 2 }
+  const T = { officials: 4, traders: 2, fgds: 2 }
   const rows = (LGS as any[]).map(l => {
     const ss = subs.filter(s => s.lg === l.code && s.consent_interview !== 'no')
-    const off = ss.filter(s => s.grp === 'official').length, trd = ss.filter(s => s.grp === 'trader').length
+    const a1 = ss.filter(s => s.grp === 'lg_official').length, a2 = ss.filter(s => s.grp === 'lg_political_enforcement').length
+    const off = a1 + a2, trd = ss.filter(s => s.grp === 'trader_association').length, fgd = ss.filter(s => String(s.grp).startsWith('fgd')).length
     const done = ss.filter(s => s.audio_status === 'done').length
     const declined = subs.filter(s => s.lg === l.code && s.consent_interview === 'no').length
     const aff: any = {}; ss.forEach(s => inc(aff, s.affiliation))
-    return { code: l.code, label: l.label, region: l.region, cat: l.cat, officials: off, traders: trd, audio_done: done, audio_total: ss.length, declined, affiliations: aff,
-      pct: Math.round(100 * (Math.min(off, T.officials) + Math.min(trd, T.traders)) / (T.officials + T.traders)) }
+    return { code: l.code, label: l.label, region: l.region, cat: l.cat, officials: off, a1, a2, traders: trd, fgds: fgd, audio_done: done, audio_total: ss.length, declined, affiliations: aff,
+      pct: Math.round(100 * (Math.min(off, T.officials) + Math.min(trd, T.traders) + Math.min(fgd, T.fgds)) / (T.officials + T.traders + T.fgds)) }
   })
-  const total = rows.reduce((a, r) => a + Math.min(r.officials, T.officials) + Math.min(r.traders, T.traders), 0)
-  return c.json({ targets: T, rows, achieved: total, target_total: rows.length * (T.officials + T.traders) })
+  const total = rows.reduce((a, r) => a + Math.min(r.officials, T.officials) + Math.min(r.traders, T.traders) + Math.min(r.fgds, T.fgds), 0)
+  const national = subs.filter(s => s.grp === 'national' && s.consent_interview !== 'no').length
+  return c.json({ targets: T, rows, achieved: total, target_total: rows.length * (T.officials + T.traders + T.fgds), national })
 })
 
-const LIKERT = ['b3_clarity', 'b6_financial', 'b6_transport', 'b6_protective', 'c4_success']
-const MULTI = ['c5_positive', 'c6_challenges', 'g3_barriers']
-const CATEG = ['b1_awareness', 'b2_ordinances', 'b4_coordination', 'b5_legal_adequacy', 'b8_grievance', 'c3_status', 'c8_meeting_freq', 'c9_plan',
-  'd1_rating', 'd2_rating', 'd3_rating', 'd4_rating', 'd5_rating', 'd6_rating', 'f1_livelihood', 'f2_alternatives', 'f3_formalization', 'f4_alt_suitability']
+const QEXCL = new Set(['consent_interview', 'consent_audio', 'consent_fgd', 'region', 'lg_name', 'lg_category'])
 app.get('/api/quant', async (c) => {
-  const subs = await loadSubs(c, { consented: true })
+  const fsm = await formSchemas(c)
+  const all = await loadSubs(c, { consented: true })
+  const count: any = {}; all.forEach(s => inc(count, s.form_uid))
+  const flist = Object.values(fsm).map(f => ({ uid: f.uid, code: f.meta.code || '', name: shortName(f.name), group: f.meta.group || '', n: count[f.uid] || 0 }))
+  const uid = c.req.query('form') || [...flist].sort((a, b) => b.n - a.n)[0]?.uid
+  const fs = fsm[uid]
+  if (!fs) return c.json({ forms: flist, form: null, questions: [], n: 0 })
+  const subs = all.filter(s => s.form_uid === uid)
   const out: any[] = []
-  const secName = (k: string) => (S.q[k]?.sec || '').replace(/^Section\s+/, '').replace(/:.*$/, '').trim()
-  for (const k of [...LIKERT, ...CATEG, ...MULTI]) {
-    const type = LIKERT.includes(k) ? 'likert' : MULTI.includes(k) ? 'multi' : 'cat'
-    const opts = Object.entries(S.ch[S.q[k].list] || {}).map(([v, l]) => ({ v, label: l as string }))
-    const overall: any = {}, byGrp: any = { official: {}, trader: {} }, byLg: any = {}, byRegion: any = {}
-    const nGrp: any = { official: 0, trader: 0 }
+  const secName = (k: string) => (fs.q[k]?.sec || '').replace(/^Section\s+/, '').replace(/:.*$/, '').replace(/^Module\s+/, 'Module ').trim()
+  for (const k of fs.order) {
+    const q = fs.q[k]; if (!q || QEXCL.has(k) || !q.list || !/^select_(one|multiple)$/.test(q.t)) continue
+    const ch = fs.ch[q.list] || {}
+    const likert = Object.keys(ch).length >= 3 && Object.keys(ch).every(x => /^[1-5]$/.test(x))
+    const type = likert ? 'likert' : q.t === 'select_multiple' ? 'multi' : 'cat'
+    const opts = Object.entries(ch).map(([v, l]) => ({ v, label: l as string }))
+    const overall: any = {}, byGrp: any = {}, byLg: any = {}, byRegion: any = {}, nGrp: any = {}
     let n = 0
     for (const s of subs) {
       const v = s.answers[k]; if (v === undefined || v === null || v === '') continue
-      n++; if (nGrp[s.grp] !== undefined) nGrp[s.grp]++
-      const vals = type === 'multi' ? split(v) : [String(v)]
-      for (const x of vals) { inc(overall, x); if (byGrp[s.grp]) inc(byGrp[s.grp], x); (byLg[s.lg] ||= {})[x] = (byLg[s.lg][x] || 0) + 1; (byRegion[s.region] ||= {})[x] = (byRegion[s.region][x] || 0) + 1 }
+      n++; inc(nGrp, s.grp)
+      for (const x of (type === 'multi' ? split(v) : [String(v)])) { inc(overall, x); inc((byGrp[s.grp] ||= {}), x); if (s.lg) inc((byLg[s.lg] ||= {}), x); if (s.region) inc((byRegion[s.region] ||= {}), x) }
     }
     const lik = type === 'likert' ? (() => {
       const m = (f: (s: any) => boolean) => mean(subs.filter(f).map(s => Number(s.answers[k])).filter(x => Number.isFinite(x)))
-      const byL: any = {}; for (const l of Object.keys(byLg)) byL[l] = m(s => s.lg === l)
-      const byR: any = {}; for (const r of Object.keys(byRegion)) byR[r] = m(s => s.region === r)
-      return { mean: m(() => true), official: m(s => s.grp === 'official'), trader: m(s => s.grp === 'trader'), byLg: byL, byRegion: byR }
+      return { mean: m(() => true), byLg: Object.fromEntries(Object.keys(byLg).map(l => [l, m(s => s.lg === l)])), byRegion: Object.fromEntries(Object.keys(byRegion).map(r => [r, m(s => s.region === r)])) }
     })() : null
-    out.push({ key: k, label: qlabel(k), section: secName(k), type, n, nGrp, options: opts, overall, byGrp, byRegion, likert: lik, byLg })
+    out.push({ key: k, label: qlabel(fs, k), section: secName(k), type, n, nGrp, options: opts, overall, byGrp, byRegion, likert: lik, byLg })
   }
-  return c.json({ questions: out, n: subs.length })
+  return c.json({ forms: flist, form: uid, questions: out, n: subs.length })
 })
 
 app.get('/api/themes', async (c) => {
   const cf = codeFilter(c)
   const { results } = await c.env.DB.prepare(`SELECT theme,dimension,polarity,grp,evidence,lg,region,submission_id sid,source FROM codes ${cf.where}`).bind(...cf.b).all()
   const subs = await loadSubs(c, { consented: true })
-  const nOff = subs.filter(s => s.grp === 'official').length, nTrd = subs.filter(s => s.grp === 'trader').length
+  const nOff = subs.filter(s => side(s.grp) === 'official').length, nTrd = subs.filter(s => side(s.grp) === 'trader').length
   const m: any = {}
   for (const r of results as any[]) {
     const t = (m[r.theme] ||= { theme: r.theme, subs: new Set(), off: new Set(), trd: new Set(), pol: {}, ev: {}, lgs: new Set(), audio: 0, text: 0, n: 0 })
-    t.n++; t.subs.add(r.sid); (r.grp === 'trader' ? t.trd : t.off).add(r.sid); inc(t.pol, r.polarity); inc(t.ev, r.evidence); t.lgs.add(r.lg)
+    t.n++; t.subs.add(r.sid); (side(r.grp) === 'trader' ? t.trd : t.off).add(r.sid); inc(t.pol, r.polarity); inc(t.ev, r.evidence); t.lgs.add(r.lg)
     r.source === 'audio' ? t.audio++ : t.text++
   }
   const rows = Object.values<any>(m).map(t => {
@@ -319,7 +349,7 @@ app.get('/api/excerpts', async (c) => {
   const where = cf.where + (q ? (cf.where ? ' AND' : 'WHERE') + ' LOWER(excerpt) LIKE ?' : '')
   const b = q ? [...cf.b, `%${q}%`] : cf.b
   const { results } = await c.env.DB.prepare(`SELECT id,submission_id sid,source,seg_start,theme,dimension,polarity,evidence,excerpt,lg,region,grp,is_demo FROM codes ${where} ORDER BY LENGTH(excerpt) DESC, id DESC LIMIT ?`).bind(...b, lim).all()
-  return c.json({ items: (results as any[]).map(r => ({ ...r, lg_label: lgLabel(r.lg), theme_label: THEME_BY_CODE[r.theme]?.label, field: r.source.replace('field:', ''), q: r.source.startsWith('field:') ? qlabel(r.source.slice(6)) : 'Audio transcript' })) })
+  return c.json({ items: (results as any[]).map(r => ({ ...r, lg_label: lgLabel(r.lg), theme_label: THEME_BY_CODE[r.theme]?.label, field: r.source.replace('field:', ''), q: r.source.startsWith('field:') ? qlabel(null, r.source.slice(6)) : 'Audio transcript' })) })
 })
 
 // Perception (rating) vs. documented figures (before/after)
@@ -329,7 +359,7 @@ const PAIRS = [
   { rating: 'd5_rating', b: 'e1_osr_before', a: 'e1_osr_after', label: 'Own-source revenue', note: 'D5 OSR vs E1.2 OSR (UGX)' },
 ]
 app.get('/api/triangulation', async (c) => {
-  const subs = (await loadSubs(c, { consented: true })).filter(s => s.grp === 'official')
+  const subs = (await loadSubs(c, { consented: true })).filter(s => s.grp === 'lg_official')
   const rows: any[] = [], lg: any = {}
   let figs = 0
   for (const s of subs) {
@@ -361,7 +391,7 @@ export function qualityFlags(s: any, tr: any) {
   if (s.duration_sec != null && s.duration_sec < 600) f.push({ k: 'short_duration', sev: 'high', msg: `Interview lasted ${Math.round(s.duration_sec / 60 * 10) / 10} min (<10 min)` })
   if (s.duration_sec != null && s.duration_sec > 4 * 3600) f.push({ k: 'long_duration', sev: 'low', msg: 'Form open > 4 hours (draft left open?)' })
   const texts = Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v)
-  const thin = s.grp === 'trader' ? 50 : 80
+  const thin = THIN[s.grp] ?? 60
   if (s.text_words < thin) f.push({ k: 'thin_text', sev: 'high', msg: `Only ${s.text_words} words across all open-ended answers` })
   const junk = texts.filter(t => /(.)\1{2,}/i.test(t) || (t.split(/\s+/).length <= 1 && t.length < 6))
   if (texts.length >= 4 && junk.length / texts.length > 0.5) f.push({ k: 'test_like', sev: 'high', msg: 'Open-ended answers look like test/gibberish input' })
@@ -372,7 +402,7 @@ export function qualityFlags(s: any, tr: any) {
   if (s.consent_audio === 'yes' && !s.audio_url) f.push({ k: 'no_audio', sev: 'high', msg: 'Audio consent given but no recording attached' })
   if (s.lat == null) f.push({ k: 'no_gps', sev: 'low', msg: 'No GPS captured' })
   if (s.interview_date && s.submitted_at && s.interview_date > s.submitted_at.slice(0, 10)) f.push({ k: 'future_date', sev: 'med', msg: 'Interview date is after submission date' })
-  if (s.grp === 'official') {
+  if (s.grp === 'lg_official') {
     const nb = ['e1_licenses', 'e1_osr', 'e1_stalls'].filter(p => s.answers[p + '_before'] != null && s.answers[p + '_before'] === s.answers[p + '_after']).length
     if (nb === 3) f.push({ k: 'identical_figures', sev: 'low', msg: 'Before/after figures identical for all three indicators' })
   }
@@ -385,6 +415,7 @@ export function qualityFlags(s: any, tr: any) {
 }
 app.get('/api/quality', async (c) => {
   const subs = await loadSubs(c)
+  const fsm = await formSchemas(c)
   const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
   const enums: any = {}, flagged: any[] = [], counts: any = {}
   for (const s of subs) {
@@ -393,7 +424,7 @@ app.get('/api/quality', async (c) => {
     const e = (enums[(s.enumerator_id || '(blank)')] ||= { enumerator: s.enumerator_id || '(blank)', n: 0, dur: [], words: [], audio: 0, flagged: 0, lgs: new Set() })
     if (s.consent_interview === 'no') continue
     e.n++; if (s.duration_sec) e.dur.push(s.duration_sec); e.words.push(s.text_words || 0); if (s.audio_url) e.audio++; if (f.some(x => x.sev === 'high')) e.flagged++; e.lgs.add(s.lg)
-    if (f.length) flagged.push({ id: s.id, lg: s.lg, label: lgLabel(s.lg), grp: s.grp, enumerator: s.enumerator_id, date: s.interview_date, demo: !!s.is_demo, flags: f, high: f.filter(x => x.sev === 'high').length })
+    if (f.length) flagged.push({ id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: fsm[s.form_uid]?.meta?.code || '', grp: s.grp, enumerator: s.enumerator_id, date: s.interview_date, demo: !!s.is_demo, flags: f, high: f.filter(x => x.sev === 'high').length })
   }
   const enumRows = Object.values<any>(enums).filter(e => e.n).map(e => ({ enumerator: e.enumerator, n: e.n, median_min: e.dur.length ? +(median(e.dur)! / 60).toFixed(1) : null, avg_words: Math.round(mean(e.words) || 0), audio_pct: e.audio / e.n, flagged: e.flagged, lgs: e.lgs.size }))
   flagged.sort((a, b) => b.high - a.high || b.flags.length - a.flags.length)
@@ -403,9 +434,10 @@ app.get('/api/quality', async (c) => {
 
 app.get('/api/interviews', async (c) => {
   const subs = await loadSubs(c)
+  const fsm = await formSchemas(c)
   const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,confidence,duration,flags FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
   const cc: any = {}; (await c.env.DB.prepare('SELECT submission_id sid,COUNT(*) n FROM codes GROUP BY submission_id').all()).results.forEach((r: any) => cc[r.sid] = r.n)
-  return c.json({ items: subs.slice().reverse().map(s => ({ id: s.id, lg: s.lg, label: lgLabel(s.lg), region: s.region, grp: s.grp, affiliation: s.affiliation, date: s.interview_date, duration_sec: s.duration_sec, enumerator: s.enumerator_id,
+  return c.json({ items: subs.slice().reverse().map(s => ({ id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: fsm[s.form_uid]?.meta?.code || '', form_name: shortName(fsm[s.form_uid]?.name || ''), region: s.region, grp: s.grp, affiliation: s.affiliation, date: s.interview_date, duration_sec: s.duration_sec, enumerator: s.enumerator_id,
     consent: s.consent_interview, audio: s.audio_status, has_audio: !!s.audio_url, words: s.text_words, codes: cc[s.id] || 0, demo: !!s.is_demo, flags: qualityFlags(s, trs[s.id]).filter(f => f.sev === 'high').length, tr_conf: trs[s.id]?.confidence ?? null })) })
 })
 app.get('/api/interview/:id', async (c) => {
@@ -415,12 +447,13 @@ app.get('/api/interview/:id', async (c) => {
   const s = { ...r, answers: J(r.answers, {}), texts: J(r.texts, {}) }
   const t: any = await c.env.DB.prepare('SELECT * FROM transcripts WHERE submission_id=?').bind(id).first()
   const codes = (await c.env.DB.prepare('SELECT source,seg_start,theme,polarity,evidence,excerpt FROM codes WHERE submission_id=? ORDER BY source,id').bind(id).all()).results
-  const order = Object.keys(S.q)
-  const closed = Object.entries<any>(s.answers).filter(([k]) => S.q[k] && !SKIP_TEXT.has(k)).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
-    .map(([k, v]) => ({ k, q: qlabel(k), section: S.q[k].sec, v: S.q[k].list ? split(v).map((x: string) => S.ch[S.q[k].list]?.[x] || x).join('; ') : v }))
-  const texts = Object.entries<string>(s.texts).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([k, v]) => ({ k, q: S.q[k]?.l || k, section: S.q[k]?.sec || '', v }))
+  const fs = (await formSchemas(c))[s.form_uid]
+  const order = fs?.order || []
+  const closed = Object.entries<any>(s.answers).filter(([k]) => fs?.q[k] && !SKIP_TEXT.has(k) && fs.q[k].t !== 'geopoint').sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([k, v]) => ({ k, q: qlabel(fs, k), section: fs!.q[k].sec, v: fs!.q[k].list ? split(String(v)).map((x: string) => fs!.ch[fs!.q[k].list]?.[x] || x).join('; ') : v }))
+  const texts = Object.entries<string>(s.texts).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([k, v]) => ({ k, q: fs?.q[k]?.l || k, section: fs?.q[k]?.sec || '', v }))
   return c.json({
-    id, lg: s.lg, label: lgLabel(s.lg), region: s.region, grp: s.grp, affiliation: S.ch.affil[s.affiliation] || s.affiliation, date: s.interview_date, duration_sec: s.duration_sec, enumerator: s.enumerator_id,
+    id, lg: s.lg, label: whereLabel(s, fs), form: fs?.meta?.code || '', form_name: shortName(fs?.name || ''), region: s.region, grp: s.grp, affiliation: s.affiliation, date: s.interview_date, duration_sec: s.duration_sec, enumerator: s.enumerator_id,
     consent: s.consent_interview, consent_audio: s.consent_audio, audio_status: s.audio_status, has_audio: !!s.audio_url, demo: !!s.is_demo, photos: s.photo_count, lat: s.lat, lon: s.lon,
     closed, texts, codes: codes.map((x: any) => ({ ...x, theme_label: THEME_BY_CODE[x.theme]?.label })),
     transcript: t ? { text: t.text, segments: J(t.segments, []), language: t.language, model: t.model, engine: t.engine, confidence: t.confidence, status: t.status, flags: J(t.flags, []), duration: t.duration, error: t.error } : null,
@@ -430,7 +463,7 @@ app.get('/api/interview/:id', async (c) => {
 
 app.get('/api/emergent', async (c) => {
   const subs = await loadSubs(c, { consented: true })
-  const docs: { text: string; grp: string }[] = subs.map(s => ({ text: Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v).join(' '), grp: s.grp }))
+  const docs: { text: string; grp: string }[] = subs.map(s => ({ text: Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v).join(' '), grp: side(s.grp) }))
   const ids = new Map(subs.map((s, i) => [s.id, i]))
   const tr = (await c.env.DB.prepare("SELECT submission_id,text FROM transcripts WHERE status='done'").all()).results as any[]
   tr.forEach(t => { const i = ids.get(t.submission_id); if (i !== undefined) docs[i].text += ' ' + t.text })
@@ -447,9 +480,14 @@ app.get('/api/export/codes.csv', async (c) => {
   return new Response(csv(rows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="evidence_matrix_codes.csv"' } })
 })
 app.get('/api/export/submissions.csv', async (c) => {
-  const subs = await loadSubs(c)
-  const keys = [...LIKERT, ...CATEG, ...MULTI, 'e1_licenses_before', 'e1_licenses_after', 'e1_osr_before', 'e1_osr_after', 'e1_stalls_before', 'e1_stalls_after']
-  const rows: any[][] = [['id', 'local_government', 'region', 'group', 'affiliation', 'interview_date', 'duration_min', 'enumerator', 'consent', 'audio_status', 'text_words', 'is_demo', ...keys]]
-  subs.forEach(s => rows.push([s.id, lgLabel(s.lg), s.region, s.grp, s.affiliation, s.interview_date, s.duration_sec ? Math.round(s.duration_sec / 6) / 10 : '', s.enumerator_id, s.consent_interview, s.audio_status, s.text_words, s.is_demo, ...keys.map(k => s.answers[k] ?? '')]))
-  return new Response(csv(rows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="submissions_closed_answers.csv"' } })
+  const fsm = await formSchemas(c)
+  const all = await loadSubs(c)
+  const count: any = {}; all.forEach(x => inc(count, x.form_uid))
+  const uid = c.req.query('form') || Object.keys(count).sort((a, b) => count[b] - count[a])[0]
+  const fs = fsm[uid]; const subs = all.filter(x => x.form_uid === uid)
+  const keys = (fs?.order || []).filter(k => fs.q[k] && ['select_one', 'select_multiple', 'integer', 'decimal', 'date'].includes(fs.q[k].t) && !QEXCL.has(k) && k !== 'interview_date')
+  const rows: any[][] = [['id', 'form', 'local_government', 'region', 'group', 'affiliation', 'interview_date', 'duration_min', 'enumerator', 'consent', 'audio_status', 'text_words', ...keys]]
+  subs.forEach(s => rows.push([s.id, fs?.meta?.code, s.lg ? lgLabel(s.lg) : '', s.region, s.grp, s.affiliation, s.interview_date, s.duration_sec ? Math.round(s.duration_sec / 6) / 10 : '', s.enumerator_id, s.consent_interview, s.audio_status, s.text_words,
+    ...keys.map(k => { const v = s.answers[k]; if (v == null) return ''; const l = fs.q[k].list; return l ? split(String(v)).map((x: string) => fs.ch[l]?.[x] || x).join('; ') : v })]))
+  return new Response(csv(rows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="submissions_${fs?.meta?.code || 'form'}.csv"` } })
 })
