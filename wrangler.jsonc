@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "KOBO_HOST": "https://kf.kobotoolbox.org",
-    "KOBO_FORMS": "a5aXBd4dw3GdBiCcKUqA8r:kii,awyYY28KeHFw38t63gpN4i:kii,aDxyhLChCpyAaF4bWkBxGr:kii,aCAksSTdaXM67vhVNUFu9A:kii,aoJ4xmsMP2TVpjZz7NbRwa:fgd"
+    "KOBO_FORMS": "a5aXBd4dw3GdBiCcKUqA8r:kii,awyYY28KeHFw38t63gpN4i:kii,aDxyhLChCpyAaF4bWkBxGr:kii,aCAksSTdaXM67vhVNUFu9A:kii,aVjETFsNkaWuA5k9e8pu4R:kii,aoJ4xmsMP2TVpjZz7NbRwa:fgd,a6DZWSJjxRZLt4AKiJdU2b:fgd"
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "webapp-production", "database_id": "local-placeholder" }

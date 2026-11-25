@@ -11,13 +11,13 @@ export const page = () => `<!doctype html>
 <body>
 <header id="topbar">
   <div class="brand"><i class="fa-solid fa-chart-column"></i>
-    <div><h1>Trade Order Implementation Study</h1><p>Qualitative evidence pipeline &middot; KII &middot; FGD &middot; audio &middot; SDLG / VNG International</p></div></div>
+    <div><h1>Trade Order Implementation Study</h1><p>Field data tracking &middot; transcription &middot; qualitative evidence &middot; SDLG / VNG International</p></div></div>
   <div id="sync-info" class="sync-info"></div>
 </header>
 <nav id="filters">
   <label>Region <select id="f-region"><option value="">All</option></select></label>
   <label>Local government <select id="f-lg"><option value="">All</option></select></label>
-  <label>Respondent group <select id="f-grp"><option value="">All</option><option value="lg_official">LG officials (A1)</option><option value="lg_political_enforcement">Political &amp; enforcement (A2)</option><option value="trader_association">Traders' association (A3)</option><option value="national">National stakeholders (A4)</option><option value="fgd_informal_traders">FGD: informal vendors (B1)</option></select></label>
+  <label>Respondent group <select id="f-grp"><option value="">All</option><option value="lg_official">LG officials (A1)</option><option value="lg_political_enforcement">Town Clerk, Mayor, Police (A2)</option><option value="street_vendor_not_relocated">Vendors not relocated (A3)</option><option value="national">National stakeholders (A4)</option><option value="market_administrator">Market administrators (A5)</option><option value="fgd_informal_traders">FGD 1: informal vendors (B1)</option><option value="fgd_formal_traders">FGD 2: formal traders (B2)</option></select></label>
   <button id="btn-reset" class="ghost"><i class="fa-solid fa-rotate-left"></i> Reset</button>
 </nav>
 <nav id="tabs"></nav>
@@ -27,5 +27,6 @@ export const page = () => `<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/field.js"></script>
 <script src="/static/report.js"></script>
 </body></html>`

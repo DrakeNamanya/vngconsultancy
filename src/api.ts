@@ -6,6 +6,7 @@ import SCHEMA from './schema.json'
 import LGS from './lgs.json'
 import LIT from './literature.json'
 import { THEME_LIT } from './report'
+import { FORM_TARGETS, TARGET_BY_CODE, targetTotal, enumKey, enumLooksValid, FLAG_INFO, crossFlags, Flag } from './field'
 
 const S: any = SCHEMA
 export const app = new Hono<{ Bindings: Env }>()
@@ -25,9 +26,9 @@ async function formSchemas(c: any): Promise<Record<string, FS>> {
 const shortName = (n: string) => (n || '').replace(/\s*\(Trade Order Study\)\s*$/, '')
 const whereLabel = (s: any, fs?: FS) => s.lg ? lgLabel(s.lg) : (s.affiliation || (s.grp === 'national' ? 'National stakeholder' : s.consent_interview === 'no' ? 'LG not recorded (declined)' : 'LG not recorded'))
 // Respondent groups (set by the form): which side of the official-vs-trader comparison they belong to
-const TRADER_GRP = new Set(['trader_association', 'fgd_informal_traders', 'trader'])
+const TRADER_GRP = new Set(['street_vendor_not_relocated', 'trader_association', 'fgd_informal_traders', 'fgd_formal_traders', 'trader'])
 const side = (g: string) => (TRADER_GRP.has(g) || String(g || '').startsWith('fgd') ? 'trader' : 'official')
-const THIN: Record<string, number> = { lg_official: 80, lg_political_enforcement: 80, national: 80, trader_association: 15, fgd_informal_traders: 100 }
+const THIN: Record<string, number> = { lg_official: 80, lg_political_enforcement: 80, national: 80, market_administrator: 60, street_vendor_not_relocated: 15, trader_association: 15, fgd_informal_traders: 100, fgd_formal_traders: 100 }
 
 // ---------- auth for write endpoints ----------
 const admin = async (c: any, next: any) => {
@@ -38,12 +39,13 @@ const admin = async (c: any, next: any) => {
 
 // ---------- shared loaders ----------
 type Sub = any
-async function loadSubs(c: any, opts: { consented?: boolean } = {}): Promise<Sub[]> {
-    const { results } = await c.env.DB.prepare(`SELECT * FROM submissions  ORDER BY id`).all()
-  const region = c.req.query('region'), lg = c.req.query('lg'), grp = c.req.query('grp')
+async function loadSubs(c: any, opts: { consented?: boolean; all?: boolean; raw?: boolean } = {}): Promise<Sub[]> {
+  const { results } = await c.env.DB.prepare(`SELECT s.*, json_extract(f.schema,'$.meta.code') AS code FROM submissions s LEFT JOIN forms f ON f.uid=s.form_uid ORDER BY s.id`).all()
+  const region = opts.raw ? '' : c.req.query('region'), lg = opts.raw ? '' : c.req.query('lg'), grp = opts.raw ? '' : c.req.query('grp')
   return results.filter((s: any) => (!region || s.region === region) && (!lg || s.lg === lg) && (!grp || s.grp === grp)
+    && (opts.all || s.field_status !== 'test')
     && (!opts.consented || s.consent_interview !== 'no'))
-    .map((s: any) => ({ ...s, answers: J(s.answers, {}), texts: J(s.texts, {}) }))
+    .map((s: any) => ({ ...s, code: s.code || '', answers: J(s.answers, {}), texts: J(s.texts, {}) }))
 }
 const codeFilter = (c: any) => {
   const w: string[] = [], b: any[] = []
@@ -220,7 +222,7 @@ app.get('/api/audio/:id', async (c) => {
 
 
 // ---------- read APIs ----------
-const GROUP_LABELS: Record<string, string> = { lg_official: 'LG officials', lg_political_enforcement: 'Political & enforcement', trader_association: "Traders' association", national: 'National stakeholders', fgd_informal_traders: 'FGD: informal vendors' }
+const GROUP_LABELS: Record<string, string> = { lg_official: 'LG officials', lg_political_enforcement: 'Political & enforcement', street_vendor_not_relocated: 'Vendors not relocated', trader_association: 'Vendors not relocated', national: 'National stakeholders', market_administrator: 'Market administrators', fgd_informal_traders: 'FGD: informal vendors', fgd_formal_traders: 'FGD: formal traders' }
 app.get('/api/forms', async (c) => {
   const fs = await formSchemas(c)
   const cnt: any = {}; (await c.env.DB.prepare('SELECT form_uid, COUNT(*) n, SUM(CASE WHEN audio_url IS NOT NULL THEN 1 ELSE 0 END) a FROM submissions GROUP BY form_uid').all()).results.forEach((r: any) => cnt[r.form_uid] = r)
@@ -235,8 +237,8 @@ app.get('/api/config', async (c) => {
     lgs: LGS, regions: S.ch.region, last_sync: lastSync?.value || null, real_rows: realN?.n || 0,
     dimensions: DIMENSIONS, objectives: OBJECTIVES, themes: THEMES.map(t => ({ code: t.code, label: t.label, dim: t.dim })),
     kobo_configured: !!c.env.KOBO_TOKEN, admin_configured: !!c.env.INGEST_TOKEN,
-    targets: { officials_per_lg: 4, traders_per_lg: 2, fgd_per_lg: 2 },
-    groups: GROUP_LABELS,
+    targets: FORM_TARGETS, target_total: targetTotal(LGS.length),
+    groups: GROUP_LABELS, flag_info: FLAG_INFO,
   })
 })
 
@@ -260,24 +262,6 @@ app.get('/api/overview', async (c) => {
     words, lgs_covered: lgsCovered, lgs_total: LGS.length, median_duration_min: dur.length ? +(median(dur)! / 60).toFixed(1) : null,
     by_group: byGrp, by_region: byRegion, by_lg: Object.entries(byLg).map(([k, v]) => ({ lg: k, label: lgLabel(k), n: v })), timeline: Object.entries(byDay).sort().map(([d, n]) => ({ d, n })),
   })
-})
-
-app.get('/api/coverage', async (c) => {
-  const subs = await loadSubs(c)
-  const T = { officials: 4, traders: 2, fgds: 2 }
-  const rows = (LGS as any[]).map(l => {
-    const ss = subs.filter(s => s.lg === l.code && s.consent_interview !== 'no')
-    const a1 = ss.filter(s => s.grp === 'lg_official').length, a2 = ss.filter(s => s.grp === 'lg_political_enforcement').length
-    const off = a1 + a2, trd = ss.filter(s => s.grp === 'trader_association').length, fgd = ss.filter(s => String(s.grp).startsWith('fgd')).length
-    const done = ss.filter(s => s.audio_status === 'done').length
-    const declined = subs.filter(s => s.lg === l.code && s.consent_interview === 'no').length
-    const aff: any = {}; ss.forEach(s => inc(aff, s.affiliation))
-    return { code: l.code, label: l.label, region: l.region, cat: l.cat, officials: off, a1, a2, traders: trd, fgds: fgd, audio_done: done, audio_total: ss.length, declined, affiliations: aff,
-      pct: Math.round(100 * (Math.min(off, T.officials) + Math.min(trd, T.traders) + Math.min(fgd, T.fgds)) / (T.officials + T.traders + T.fgds)) }
-  })
-  const total = rows.reduce((a, r) => a + Math.min(r.officials, T.officials) + Math.min(r.traders, T.traders) + Math.min(r.fgds, T.fgds), 0)
-  const national = subs.filter(s => s.grp === 'national' && s.consent_interview !== 'no').length
-  return c.json({ targets: T, rows, achieved: total, target_total: rows.length * (T.officials + T.traders + T.fgds), national })
 })
 
 const QEXCL = new Set(['consent_interview', 'consent_audio', 'consent_fgd', 'region', 'lg_name', 'lg_category'])
@@ -404,11 +388,15 @@ function gpsCheck(s: any) {
 
 // ---------- data quality ----------
 export function qualityFlags(s: any, tr: any) {
-  const f: { k: string; sev: 'high' | 'med' | 'low'; msg: string }[] = []
+  const f: Flag[] = []
   const cons = s.consent_interview !== 'no'
   if (!cons) return f
   const lg = LG_BY[s.lg]
-  if (s.duration_sec != null && s.duration_sec < 600) f.push({ k: 'short_duration', sev: 'high', msg: `Interview lasted ${Math.round(s.duration_sec / 60 * 10) / 10} min (<10 min)` })
+  const minMin = TARGET_BY_CODE[s.code]?.min_min ?? 10
+  if (s.duration_sec != null && s.duration_sec < minMin * 60) f.push({ k: 'short_duration', sev: 'high', msg: `Session lasted ${Math.round(s.duration_sec / 60 * 10) / 10} min (expected at least ${minMin} min for this form)` })
+  if (!s.lg && s.grp !== 'national') f.push({ k: 'no_lg', sev: 'high', msg: 'No local government recorded: cannot be counted toward any LG target' })
+  if (!enumLooksValid(s.enumerator_id)) f.push({ k: 'bad_enumerator_id', sev: 'med', msg: `Enumerator ID "${s.enumerator_id || ''}" is not in a usable format (expected e.g. 042 or TAB-042)` })
+  if (s.interview_date && s.started_at) { const d = Math.abs((Date.parse(s.interview_date) - Date.parse(s.started_at.slice(0, 10))) / 864e5); if (d >= 2) f.push({ k: 'date_mismatch', sev: 'low', msg: `Interview date ${s.interview_date} but the form was started on ${s.started_at.slice(0, 10)}` }) }
   if (s.duration_sec != null && s.duration_sec > 4 * 3600) f.push({ k: 'long_duration', sev: 'low', msg: 'Form open > 4 hours (draft left open?)' })
   const texts = Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v)
   const thin = THIN[s.grp] ?? 60
@@ -433,37 +421,171 @@ export function qualityFlags(s: any, tr: any) {
   }
   if (tr) {
     const fl = J(tr.flags, []) as string[]
+    if (tr.duration && s.duration_sec && s.duration_sec >= 900 && s.duration_sec <= 7200 && tr.duration < 0.3 * s.duration_sec) f.push({ k: 'audio_short', sev: 'low', msg: `Recording is ${Math.round(tr.duration / 60)} min but the session lasted ${Math.round(s.duration_sec / 60)} min` })
     if (tr.status === 'review') f.push({ k: 'transcript_review', sev: 'high', msg: 'Transcript flagged (' + (fl.join(', ') || 'low quality') + '): needs human review before coding' })
     else if (fl.length) f.push({ k: 'transcript_note', sev: 'low', msg: 'Transcript notes: ' + fl.join(', ') })
   }
   return f
 }
-app.get('/api/quality', async (c) => {
-  const subs = await loadSubs(c)
-  const fsm = await formSchemas(c)
+// Flags for every live record (single-record checks + cross-record checks). Records marked "valid" keep their flags but as acknowledged.
+async function flagMap(c: any) {
+  const subs = await loadSubs(c, { raw: true })
   const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
-  const enums: any = {}, flagged: any[] = [], counts: any = {}
+  const cross = crossFlags(subs, { code: (s: any) => s.code, lg: (l: string) => LG_BY[l] })
+  const m = new Map<number, Flag[]>()
   for (const s of subs) {
-    const f = qualityFlags(s, trs[s.id])
-    f.forEach(x => inc(counts, x.k))
-    const e = (enums[(s.enumerator_id || '(blank)')] ||= { enumerator: s.enumerator_id || '(blank)', n: 0, dur: [], words: [], audio: 0, flagged: 0, lgs: new Set() })
-    if (s.consent_interview === 'no') continue
-    e.n++; if (s.duration_sec) e.dur.push(s.duration_sec); e.words.push(s.text_words || 0); if (s.audio_url) e.audio++; if (f.some(x => x.sev === 'high')) e.flagged++; e.lgs.add(s.lg)
-    if (f.length) flagged.push({ id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: fsm[s.form_uid]?.meta?.code || '', grp: s.grp, enumerator: s.enumerator_id, date: s.interview_date, demo: !!s.is_demo, flags: f, high: f.filter(x => x.sev === 'high').length })
+    let f: Flag[] = [...qualityFlags(s, trs[s.id]), ...(cross.get(s.id) || [])]
+    if (s.consent_interview === 'no') f = []
+    if (s.field_status === 'valid') f = f.map(x => ({ ...x, ack: true }))
+    m.set(s.id, f)
   }
-  const enumRows = Object.values<any>(enums).filter(e => e.n).map(e => ({ enumerator: e.enumerator, n: e.n, median_min: e.dur.length ? +(median(e.dur)! / 60).toFixed(1) : null, avg_words: Math.round(mean(e.words) || 0), audio_pct: e.audio / e.n, flagged: e.flagged, lgs: e.lgs.size }))
-  flagged.sort((a, b) => b.high - a.high || b.flags.length - a.flags.length)
-  const clean = subs.filter(s => s.consent_interview !== 'no').length - flagged.filter(f => f.high > 0).length
-  return c.json({ counts, flagged, enumerators: enumRows, total: subs.length, clean_pct: subs.length ? clean / subs.length : null })
+  return { m, trs, subs }
+}
+const openHigh = (f: Flag[] = []) => f.filter(x => x.sev === 'high' && !x.ack).length
+
+app.get('/api/quality', async (c) => {
+  const fsm = await formSchemas(c)
+  const { m, subs: all } = await flagMap(c)
+  const region = c.req.query('region'), lg = c.req.query('lg'), grp = c.req.query('grp')
+  const subs = all.filter((s: any) => (!region || s.region === region) && (!lg || s.lg === lg) && (!grp || s.grp === grp))
+  const counts: any = {}, byGroup: any = { data: 0, audio: 0, enumerator: 0, location: 0 }, flagged: any[] = []
+  for (const s of subs) {
+    const f = m.get(s.id) || []
+    const open = f.filter(x => !x.ack)
+    open.forEach(x => { inc(counts, x.k); inc(byGroup, FLAG_INFO[x.k]?.group || 'data') })
+    if (f.length || s.field_status === 'recheck') flagged.push({ id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: s.code, grp: s.grp, enumerator: s.enumerator_id, ekey: enumKey(s.enumerator_id), date: s.interview_date, status: s.field_status || 'auto', note: s.field_note || '', flags: f, high: openHigh(f), open: open.length })
+  }
+  flagged.sort((a, b) => b.high - a.high || b.open - a.open || b.id - a.id)
+  const live = subs.filter((s: any) => s.consent_interview !== 'no')
+  const clean = live.filter((s: any) => !openHigh(m.get(s.id))).length
+  const tests = (await loadSubs(c, { all: true, raw: true })).filter((s: any) => s.field_status === 'test').map((s: any) => ({ id: s.id, form: s.code, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), enumerator: s.enumerator_id, note: s.field_note || '', date: s.interview_date }))
+  return c.json({ counts, by_group: byGroup, info: FLAG_INFO, flagged, tests, total: live.length, clean, clean_pct: live.length ? clean / live.length : null })
+})
+
+// Mark a submission: valid (flags acknowledged), recheck (send back to enumerator), test (excluded everywhere), auto (reset)
+app.post('/api/submission/:id/status', admin, async (c) => {
+  const id = Number(c.req.param('id')); const b = await c.req.json()
+  if (!['auto', 'valid', 'recheck', 'test'].includes(b.status)) return c.json({ error: 'bad status' }, 400)
+  const s: any = await c.env.DB.prepare('SELECT * FROM submissions WHERE id=?').bind(id).first()
+  if (!s) return c.json({ error: 'not found' }, 404)
+  const st: any[] = [c.env.DB.prepare('UPDATE submissions SET field_status=?, field_note=? WHERE id=?').bind(b.status, String(b.note || '').slice(0, 300) || null, id)]
+  if (b.status === 'test') st.push(c.env.DB.prepare('DELETE FROM codes WHERE submission_id=?').bind(id))
+  else if (s.field_status === 'test') {
+    const sub = { ...s, texts: J(s.texts, {}) }
+    st.push(...codingStatements(c.env, sub))
+    const t: any = await c.env.DB.prepare("SELECT segments FROM transcripts WHERE submission_id=? AND status='done'").bind(id).first()
+    if (t) st.push(...audioCodes(c.env, sub, J(t.segments, [])))
+  }
+  await c.env.DB.batch(st)
+  return c.json({ ok: true })
+})
+
+// ---------- field monitoring ----------
+const isoDay = (s: any) => (s.interview_date || (s.submitted_at || '').slice(0, 10) || '').slice(0, 10)
+const countable = (s: any) => s.consent_interview !== 'no'
+
+app.get('/api/coverage', async (c) => {
+  const { m, subs } = await flagMap(c)
+  const region = c.req.query('region')
+  const nLg = (LGS as any[]).length
+  const cols = FORM_TARGETS.map(t => ({ code: t.code, label: t.label, short: t.short, per_lg: t.per_lg || null, total: t.total || null }))
+  const live = subs.filter(countable)
+  const cell = (code: string, lgc?: string) => {
+    const ss = live.filter(s => s.code === code && (lgc ? s.lg === lgc : true))
+    return { n: ss.length, clean: ss.filter(s => !openHigh(m.get(s.id))).length }
+  }
+  const rows = (LGS as any[]).filter(l => !region || l.region === region).map(l => {
+    const cells: any = {}; let got = 0, need = 0
+    for (const t of FORM_TARGETS) if (t.per_lg) { const x = cell(t.code, l.code); cells[t.code] = { ...x, target: t.per_lg }; got += Math.min(x.n, t.per_lg); need += t.per_lg }
+    const declined = subs.filter(s => s.lg === l.code && s.consent_interview === 'no').length
+    const last = live.filter(s => s.lg === l.code).map(isoDay).sort().pop() || null
+    return { code: l.code, label: l.label, region: l.region, cat: l.cat, cells, got, need, pct: need ? got / need : 0, declined, last }
+  })
+  const perForm = FORM_TARGETS.map(t => {
+    if (t.per_lg) {
+      const ss = live.filter(s => s.code === t.code)
+      const capped = (LGS as any[]).reduce((a, l) => a + Math.min(ss.filter(s => s.lg === l.code).length, t.per_lg!), 0)
+      return { code: t.code, label: t.label, short: t.short, target: t.per_lg * nLg, got: capped, submitted: ss.length, clean: ss.filter(s => !openHigh(m.get(s.id))).length, no_lg: ss.filter(s => !s.lg).length, lgs_done: (LGS as any[]).filter(l => ss.filter(s => s.lg === l.code).length >= t.per_lg!).length, per_lg: t.per_lg }
+    }
+    const x = cell(t.code)
+    return { code: t.code, label: t.label, short: t.short, target: t.total!, got: Math.min(x.n, t.total!), submitted: x.n, clean: x.clean, no_lg: 0, lgs_done: null, per_lg: null }
+  })
+  const achieved = perForm.reduce((a, p) => a + p.got, 0), target = targetTotal(nLg)
+  const regions: any = {}
+  for (const r of rows) { const g = (regions[r.region] ||= { region: r.region, got: 0, need: 0, lgs: 0 }); g.got += r.got; g.need += r.need; g.lgs++ }
+  return c.json({ cols, rows, per_form: perForm, achieved, target_total: target, pct: achieved / target, regions: Object.values(regions), unassigned: live.filter(s => !s.lg && s.grp !== 'national').length })
+})
+
+// Overview for field coordinators: progress, daily trend, processing funnel per form
+app.get('/api/field', async (c) => {
+  const fsm = await formSchemas(c)
+  const { m, trs, subs } = await flagMap(c)
+  const live = subs.filter(countable)
+  const cc: any = {}; (await c.env.DB.prepare('SELECT submission_id sid,COUNT(*) n FROM codes GROUP BY submission_id').all()).results.forEach((r: any) => cc[r.sid] = r.n)
+  const funnel = (ss: any[]) => {
+    const f: any = { submitted: ss.length, declined: 0, audio_expected: 0, audio_uploaded: 0, audio_missing: 0, pending: 0, processing: 0, transcribed: 0, review: 0, rejected: 0, failed: 0, coded: 0, text_coded: 0, flagged: 0 }
+    for (const s of ss) {
+      if (!countable(s)) { f.declined++; continue }
+      if (s.consent_audio === 'yes' || s.audio_url) f.audio_expected++
+      if (s.audio_url) f.audio_uploaded++; else if (s.consent_audio === 'yes') f.audio_missing++
+      const a = s.audio_status; if (a === 'pending') f.pending++; else if (a === 'processing') f.processing++; else if (a === 'done') f.transcribed++; else if (a === 'review') f.review++; else if (a === 'rejected') f.rejected++; else if (a === 'failed') f.failed++
+      if (cc[s.id]) f.coded++
+      if (s.text_words > 0) f.text_coded++
+      if (openHigh(m.get(s.id))) f.flagged++
+    }
+    return f
+  }
+  const byForm = Object.values(fsm).map(fs => ({ code: fs.meta.code || '', name: shortName(fs.name), group: fs.meta.group, ...funnel(subs.filter(s => s.form_uid === fs.uid)) })).sort((a, b) => a.code.localeCompare(b.code))
+  const days: any = {}
+  for (const s of live) { const d = isoDay(s) || 'unknown'; const r = (days[d] ||= { d, n: 0 }); r.n++; r[s.code] = (r[s.code] || 0) + 1 }
+  const byRegion: any = {}; live.forEach(s => inc(byRegion, s.region || 'unknown'))
+  const dates = live.map(isoDay).filter(Boolean).sort()
+  const enumSet = new Set(live.map(s => enumKey(s.enumerator_id)))
+  const lastSub = live.map(s => s.submitted_at).filter(Boolean).sort().pop() || null
+  const fl: any = {}; for (const s of live) for (const x of m.get(s.id) || []) if (!x.ack) inc(fl, FLAG_INFO[x.k]?.group || 'data')
+  const lastSync = await c.env.DB.prepare("SELECT value FROM meta WHERE key='last_sync'").first<any>()
+  return c.json({
+    funnel: funnel(subs), by_form: byForm, daily: Object.values(days).sort((a: any, b: any) => a.d.localeCompare(b.d)), by_region: byRegion,
+    first_date: dates[0] || null, last_date: dates[dates.length - 1] || null, last_submission: lastSub, last_sync: lastSync?.value || null,
+    enumerators: enumSet.size, lgs_active: new Set(live.map(s => s.lg).filter(Boolean)).size, lgs_total: (LGS as any[]).length,
+    flags_open: fl, records_with_open_high: live.filter(s => openHigh(m.get(s.id))).length, live: live.length, tests: (await loadSubs(c, { all: true, raw: true })).filter((s: any) => s.field_status === 'test').length,
+  })
+})
+
+// Per-enumerator tracker: who submits what, where, when, and how clean it is
+app.get('/api/enumerators', async (c) => {
+  const { m, trs, subs } = await flagMap(c)
+  const e: Record<string, any> = {}
+  for (const s of subs) {
+    const k = enumKey(s.enumerator_id)
+    const r = (e[k] ||= { key: k, raw: new Set<string>(), n: 0, declined: 0, forms: {}, lgs: new Set<string>(), regions: new Set<string>(), days: new Set<string>(), dur: [] as number[], words: [] as number[], aExp: 0, aUp: 0, aDone: 0, aReview: 0, gps: 0, high: 0, open: 0, first: null, last: null, lastId: 0, rechecks: 0, flags: {} })
+    r.raw.add(String(s.enumerator_id || '').trim() || '(blank)')
+    if (!countable(s)) { r.declined++; continue }
+    r.n++; inc(r.forms, s.code || '?'); if (s.lg) r.lgs.add(s.lg); if (s.region) r.regions.add(s.region)
+    const d = isoDay(s); if (d) { r.days.add(d); if (!r.first || d < r.first) r.first = d; if (!r.last || d > r.last) r.last = d }
+    if (s.duration_sec) r.dur.push(s.duration_sec); r.words.push(s.text_words || 0)
+    if (s.consent_audio === 'yes' || s.audio_url) r.aExp++; if (s.audio_url) r.aUp++
+    if (s.audio_status === 'done') r.aDone++; if (s.audio_status === 'review') r.aReview++
+    if (s.lat != null) r.gps++
+    const f = (m.get(s.id) || []).filter(x => !x.ack); if (f.some(x => x.sev === 'high')) r.high++; if (f.length) r.open++
+    f.forEach(x => inc(r.flags, x.k)); if (s.field_status === 'recheck') r.rechecks++
+    if (s.id > r.lastId) r.lastId = s.id
+  }
+  const rows = Object.values(e).filter(r => r.n || r.declined).map(r => ({
+    key: r.key, raw: [...r.raw], valid_id: enumLooksValid(r.key), n: r.n, declined: r.declined, forms: r.forms, lgs: [...r.lgs], regions: [...r.regions], days: r.days.size, first: r.first, last: r.last,
+    median_min: r.dur.length ? +(median(r.dur)! / 60).toFixed(1) : null, avg_words: Math.round(mean(r.words) || 0), audio_expected: r.aExp, audio_uploaded: r.aUp, transcribed: r.aDone, in_review: r.aReview,
+    gps_pct: r.n ? r.gps / r.n : null, high: r.high, open: r.open, rechecks: r.rechecks, flags: r.flags, clean_pct: r.n ? (r.n - r.high) / r.n : null,
+  })).sort((a, b) => b.n - a.n)
+  return c.json({ rows, total: rows.length, valid_ids: rows.filter(r => r.valid_id).length })
 })
 
 app.get('/api/interviews', async (c) => {
   const subs = await loadSubs(c)
   const fsm = await formSchemas(c)
-  const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,confidence,duration,flags FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const { m, trs } = await flagMap(c)
   const cc: any = {}; (await c.env.DB.prepare('SELECT submission_id sid,COUNT(*) n FROM codes GROUP BY submission_id').all()).results.forEach((r: any) => cc[r.sid] = r.n)
-  return c.json({ items: subs.slice().reverse().map(s => ({ id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: fsm[s.form_uid]?.meta?.code || '', form_name: shortName(fsm[s.form_uid]?.name || ''), region: s.region, grp: s.grp, affiliation: s.affiliation, date: s.interview_date, duration_sec: s.duration_sec, enumerator: s.enumerator_id,
-    consent: s.consent_interview, audio: s.audio_status, has_audio: !!s.audio_url, words: s.text_words, codes: cc[s.id] || 0, demo: !!s.is_demo, flags: qualityFlags(s, trs[s.id]).filter(f => f.sev === 'high').length, tr_conf: trs[s.id]?.confidence ?? null })) })
+  return c.json({ items: subs.slice().reverse().map(s => { const f = (m.get(s.id) || []); return { id: s.id, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), form: s.code, form_name: shortName(fsm[s.form_uid]?.name || ''), region: s.region, grp: s.grp, affiliation: s.affiliation, date: s.interview_date, submitted: s.submitted_at, duration_sec: s.duration_sec, enumerator: s.enumerator_id, ekey: enumKey(s.enumerator_id),
+    consent: s.consent_interview, audio: s.audio_status, has_audio: !!s.audio_url, words: s.text_words, codes: cc[s.id] || 0, demo: !!s.is_demo, status: s.field_status || 'auto', flags: openHigh(f), flag_list: f.filter(x => !x.ack).map(x => x.k), tr_conf: trs[s.id]?.confidence ?? null } }) })
 })
 app.get('/api/interview/:id', async (c) => {
   const id = Number(c.req.param('id'))
@@ -482,7 +604,7 @@ app.get('/api/interview/:id', async (c) => {
     consent: s.consent_interview, consent_audio: s.consent_audio, audio_status: s.audio_status, has_audio: !!s.audio_url, demo: !!s.is_demo, photos: s.photo_count, lat: s.lat, lon: s.lon,
     closed, texts, codes: codes.map((x: any) => ({ ...x, theme_label: THEME_BY_CODE[x.theme]?.label })),
     transcript: t ? { text: t.text, segments: J(t.segments, []), language: t.language, model: t.model, engine: t.engine, confidence: t.confidence, status: t.status, flags: J(t.flags, []), duration: t.duration, error: t.error } : null,
-    flags: qualityFlags(s, t),
+    flags: (await flagMap(c)).m.get(id) || [], status: s.field_status || 'auto', note: s.field_note || '', ekey: enumKey(s.enumerator_id), info: FLAG_INFO,
   })
 })
 

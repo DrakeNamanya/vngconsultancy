@@ -12,9 +12,9 @@ const DIMCOL = () => Object.fromEntries(S.cfg.dimensions.map(d => [d.id, d.color
 const lgName = c => S.cfg.lgs.find(l => l.code === c)?.label || c
 const regName = c => S.cfg.regions[c] || c
 const TABS = [
-  ['overview', 'fa-gauge-high', 'Overview'], ['coverage', 'fa-map-location-dot', 'Field coverage'], ['themes', 'fa-tags', 'Themes'],
-  ['map', 'fa-location-dot', 'Map'], ['heatmap', 'fa-table-cells', 'LG comparison'], ['evidence', 'fa-quote-left', 'Evidence & quotes'], ['quant', 'fa-chart-simple', 'Closed questions'],
-  ['triang', 'fa-scale-balanced', 'Triangulation'], ['interviews', 'fa-microphone-lines', 'Interviews & audio'], ['quality', 'fa-shield-halved', 'Data quality'], ['report', 'fa-file-lines', 'Report'], ['pipeline', 'fa-gears', 'Pipeline'],
+  ['overview', 'fa-gauge-high', 'Field overview'], ['coverage', 'fa-table-cells-large', 'Coverage vs target'], ['enumerators', 'fa-user-group', 'Enumerators'], ['errors', 'fa-triangle-exclamation', 'Errors & review'],
+  ['interviews', 'fa-microphone-lines', 'Submissions & audio'], ['map', 'fa-location-dot', 'Map'], ['themes', 'fa-tags', 'Themes'], ['heatmap', 'fa-table-cells', 'LG comparison'],
+  ['evidence', 'fa-quote-left', 'Evidence & quotes'], ['quant', 'fa-chart-simple', 'Closed questions'], ['triang', 'fa-scale-balanced', 'Triangulation'], ['report', 'fa-file-lines', 'Report'], ['pipeline', 'fa-gears', 'Pipeline'],
 ]
 
 function qs(extra = {}) {
@@ -40,8 +40,8 @@ function kill() { S.charts.forEach(c => c.destroy()); S.charts = [] }
 function chart(id, cfg) { const el = document.getElementById(id); if (!el) return; const c = new Chart(el, cfg); S.charts.push(c); return c }
 const empty = (t, d) => `<div class="empty"><b>${t}</b>${d || ''}</div>`
 const opt = (arr, sel) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('')
-const GRP = { lg_official: 'LG official', lg_political_enforcement: 'Political / enforcement', trader_association: "Traders' assoc.", national: 'National', fgd_informal_traders: 'FGD informal vendors', official: 'Official', trader: 'Trader' }
-const isTrader = g => g === 'trader' || g === 'trader_association' || (g || '').startsWith('fgd')
+const GRP = { lg_official: 'LG official', lg_political_enforcement: 'Political / enforcement', street_vendor_not_relocated: 'Vendor not relocated', trader_association: 'Vendor not relocated', national: 'National', market_administrator: 'Market administrator', fgd_informal_traders: 'FGD informal', fgd_formal_traders: 'FGD formal', official: 'Official', trader: 'Trader' }
+const isTrader = g => ['trader', 'trader_association', 'street_vendor_not_relocated'].includes(g) || (g || '').startsWith('fgd')
 const EVID = { documented: 'info', observed: 'teal', reported: '', inferred: 'warn' }
 
 async function init() {
@@ -79,48 +79,9 @@ const bars = (items, max, cls = '') => items.map(([l, n, extra]) => `<div class=
 const polStack = p => { const t = Object.values(p || {}).reduce((a, b) => a + b, 0) || 1; return `<div class="stack" title="${Object.entries(p || {}).map(([k, v]) => k + ': ' + v).join(', ')}">${['positive', 'mixed', 'neutral', 'negative'].map(k => `<i style="width:${100 * (p?.[k] || 0) / t}%;background:${POLCOL[k]}"></i>`).join('')}</div>` }
 
 const VIEWS = {}
-VIEWS.overview = async (v) => {
-  const [o, th] = await Promise.all([api('overview'), api('themes')])
-  if (!o.total) { v.innerHTML = empty('No submissions in this view yet', 'Run a sync from the <b>Pipeline</b> tab.'); return }
-  const a = o.audio, audioN = (a.done || 0)
-  const eligible = (o.consented) - (a.declined || 0)
-  v.innerHTML = `
-  <div class="kpis">
-    ${kpi(o.consented, 'Interviews (consented)', `${o.declined} declined &middot; ${Object.entries(o.by_group).map(([g, n]) => n + ' ' + (GRP[g] || g)).join(' &middot; ') || 'none yet'}`)}
-    ${kpi(`${o.lgs_covered}/${o.lgs_total}`, 'Local governments reached', `${S.cfg.targets.officials_per_lg + S.cfg.targets.traders_per_lg} KIIs + ${S.cfg.targets.fgd_per_lg} FGDs targeted per LG`, 'navy')}
-    ${kpi(`${audioN}`, 'Audio transcribed', `${a.pending || 0} pending &middot; ${a.review || 0} in review &middot; ${a.failed || 0} failed`, 'gold')}
-    ${kpi(fmt(o.codes.total), 'Coded evidence segments', `${o.codes.themes}/${o.codes.themes_total} themes seen &middot; ${o.codes.submissions} interviews coded`)}
-    ${kpi(fmt(o.words), 'Words of open-ended text', o.median_duration_min ? `median interview ${o.median_duration_min} min` : '')}
-    ${kpi(o.transcripts.hours + ' h', 'Audio hours transcribed', o.transcripts.confidence ? `mean ASR confidence ${pct(o.transcripts.confidence)}` : 'no transcripts yet', 'red')}
-  </div>
-  <div class="dimgrid">${th.dimensions.map(d => `<div class="dim" style="border-left-color:${d.color}"><b>${d.label}</b><span>${d.interviews}</span><small>interviews &middot; ${d.mentions} segments &middot; ${S.cfg.objectives.find(x => x.id === d.obj)?.id}</small></div>`).join('')}</div>
-  <div class="grid g2">
-    <div class="card"><h3>Interviews over time</h3><div class="sub">By interview date</div><canvas id="c-time"></canvas></div>
-    <div class="card"><h3>Top themes</h3><div class="sub">Share of interviews mentioning each theme (all sources)</div>${th.themes.length ? bars(th.themes.slice(0, 9).map(t => [t.label, t.interviews, ` <span class="mu">${pct(t.pct)}</span>`]), th.themes[0].interviews) : '<div class="mu">No coded text yet.</div>'}</div>
-    <div class="card"><h3>Audio pipeline status</h3><div class="sub">Interviews with consent</div>${audioBar(a)}<div class="legend">${audioLegend(a)}</div></div>
-    <div class="card"><h3>Sentiment of coded evidence</h3><div class="sub">Rule-based polarity per coded segment: treat as a screening aid, not a finding</div><canvas id="c-pol"></canvas></div>
-  </div>`
-  chart('c-time', { type: 'bar', data: { labels: o.timeline.map(x => x.d), datasets: [{ data: o.timeline.map(x => x.n), backgroundColor: COL.teal }] }, options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } })
-  const pk = ['positive', 'mixed', 'neutral', 'negative']
-  chart('c-pol', { type: 'doughnut', data: { labels: pk, datasets: [{ data: pk.map(k => th.polarity[k] || 0), backgroundColor: pk.map(k => POLCOL[k]) }] }, options: { plugins: { legend: { position: 'right' } } } })
-}
 const AUD = { done: ['Transcribed', COL.teal], pending: ['Pending', COL.grey], processing: ['Processing', COL.blue], review: ['Needs review', COL.gold], failed: ['Failed', COL.red], missing: ['Missing audio', '#8b5e3c'], declined: ['No audio consent', '#cbd5e1'], rejected: ['Rejected', '#6b4c4c'], none: ['No audio', '#e2e8f0'] }
 const audioBar = a => { const t = Object.values(a).reduce((x, y) => x + y, 0) || 1; return `<div class="audio-status">${Object.keys(AUD).filter(k => a[k]).map(k => `<div style="width:${100 * a[k] / t}%;background:${AUD[k][1]}">${a[k]}</div>`).join('')}</div>` }
 const audioLegend = a => Object.keys(AUD).filter(k => a[k]).map(k => `<span><i style="background:${AUD[k][1]}"></i>${AUD[k][0]}</span>`).join('')
-
-VIEWS.coverage = async (v) => {
-  const c = await api('coverage')
-  if (!c.rows.some(r => r.officials + r.traders + r.fgds) && !c.national) { v.innerHTML = empty('No coverage data yet', 'Targets per LG: ' + c.targets.officials + ' official KIIs + ' + c.targets.traders + ' trader KIIs + ' + c.targets.fgds + ' FGDs.'); return }
-  const rows = c.rows.filter(r => (!S.f.region || r.region === S.f.region) && (!S.f.lg || r.code === S.f.lg))
-  const cell = (n, t) => `${n}/${t} ${n >= t ? '<span class="pill good">&check;</span>' : ''}`
-  v.innerHTML = `<div class="hint">Targets from the inception report, per local government: <b>${c.targets.officials} official KIIs</b> (forms A1 + A2), <b>${c.targets.traders} trader KIIs</b> (A3) and <b>${c.targets.fgds} FGDs</b> (B1). Overall progress: <b>${c.achieved}/${c.target_total}</b> (${pct(c.achieved / c.target_total)}). National-level stakeholder interviews (A4, not tied to an LG): <b>${c.national}</b>.</div>
-  <div class="card"><div class="tw"><table><thead><tr><th>Local government</th><th>Region</th><th>Officials (A1+A2)</th><th>Traders (A3)</th><th>FGDs (B1)</th><th style="min-width:150px">Progress</th><th>Audio done</th><th>Declined</th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="click" data-lg="${r.code}"><td><b>${esc(r.label)}</b></td><td>${esc(regName(r.region))}</td>
-   <td>${cell(r.officials, c.targets.officials)} <span class="mu">(${r.a1}+${r.a2})</span></td><td>${cell(r.traders, c.targets.traders)}</td><td>${cell(r.fgds, c.targets.fgds)}</td>
-   <td><div class="row" style="grid-template-columns:1fr 40px;margin:0"><div class="bar ${r.pct >= 100 ? '' : 'gold'}"><i style="width:${r.pct}%"></i></div><span class="n">${r.pct}%</span></div></td><td>${r.audio_done}/${r.audio_total}</td><td>${r.declined || ''}</td></tr>`).join('')}
-  </tbody></table></div></div>`
-  v.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => { S.f.lg = tr.dataset.lg; $('#f-lg').value = tr.dataset.lg; S.tab = 'interviews'; location.hash = 'interviews'; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'interviews')); render() })
-}
 
 VIEWS.themes = async (v) => {
   const t = await api('themes')
@@ -244,22 +205,6 @@ VIEWS.triang = async (v) => {
   v.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
 }
 
-VIEWS.interviews = async (v) => {
-  const r = await api('interviews')
-  if (!r.items.length) { v.innerHTML = empty('No interviews in this view', 'Sync from KoboToolbox in the Pipeline tab.'); return }
-  v.innerHTML = `<div class="toolbar"><label>Audio status<select id="i-aud"><option value="">All</option>${opt(Object.entries(AUD).map(([k, x]) => [k, x[0]]), '')}</select></label><label>Search<input type="search" id="i-q" placeholder="LG, enumerator, id"></label><span class="mu" id="i-n"></span></div>
-  <div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>Form</th><th>Where / who</th><th>Group</th><th>Date</th><th>Duration</th><th>Enumerator</th><th>Words</th><th>Codes</th><th>Audio</th><th>Flags</th></tr></thead><tbody id="i-body"></tbody></table></div></div>`
-  const draw = () => {
-    const a = $('#i-aud').value, q = $('#i-q').value.toLowerCase()
-    const rows = r.items.filter(x => (!a || x.audio === a) && (!q || (x.label + ' ' + (x.enumerator || '') + ' ' + x.id).toLowerCase().includes(q)))
-    $('#i-n').textContent = rows.length + ' interviews'
-    $('#i-body').innerHTML = rows.map(x => `<tr class="click" data-i="${x.id}"><td>${x.id}</td><td><span class="pill" title="${esc(x.form_name || '')}">${esc(x.form || '')}</span></td><td><b>${esc(x.label)}</b></td><td>${GRP[x.grp] || '-'}</td><td>${x.date || '-'}</td><td>${mins(x.duration_sec)}</td><td>${esc(x.enumerator || '-')}</td><td>${x.words}</td><td>${x.codes}</td>
-      <td><span class="pill" style="background:${AUD[x.audio]?.[1] || '#eee'}22;color:${AUD[x.audio]?.[1] || '#555'}">${x.consent === 'no' ? 'declined interview' : (AUD[x.audio]?.[0] || x.audio)}</span></td><td>${x.flags ? `<span class="pill bad">${x.flags}</span>` : ''}</td></tr>`).join('')
-    $('#i-body').querySelectorAll('tr').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
-  }
-  $('#i-aud').onchange = draw; $('#i-q').oninput = draw; draw()
-}
-
 async function showInterview(id, seek) {
   openDrawer('<div class="loading">Loading&hellip;</div>')
   const d = await (await fetch('/api/interview/' + id)).json()
@@ -271,8 +216,9 @@ async function showInterview(id, seek) {
   const canTrans = t && ['review', 'done', 'rejected'].includes(t.status)
   openDrawer(`<h2 style="margin:0 0 4px;color:var(--navy)">${esc(d.label)} <span class="pill ${isTrader(d.grp) ? 'warn' : 'info'}">${GRP[d.grp] || ''}</span></h2>
   <div class="mu">${esc(d.form_name || '')} &middot; #${d.id}${d.affiliation && d.affiliation !== d.label ? ' &middot; ' + esc(d.affiliation) : ''}</div>
-  <div class="kv"><div>Date<b>${d.date || '-'}</b></div><div>Duration<b>${mins(d.duration_sec)}</b></div><div>Enumerator<b>${esc(d.enumerator || '-')}</b></div><div>Audio consent<b>${d.consent_audio || '-'}</b></div><div>Photos<b>${d.photos}</b></div><div>GPS<b>${d.lat != null ? d.lat.toFixed(3) + ', ' + d.lon.toFixed(3) : 'none'}</b></div></div>
-  ${d.flags.length ? `<h4>Quality flags</h4>${d.flags.map(f => `<div class="flag ${f.sev}"><i class="fa-solid fa-triangle-exclamation"></i><span>${esc(f.msg)}</span></div>`).join('')}` : ''}
+  <div class="kv"><div>Date<b>${d.date || '-'}</b></div><div>Duration<b>${mins(d.duration_sec)}</b></div><div>Enumerator<b>${esc(d.enumerator || '-')}</b>${d.ekey && d.ekey !== d.enumerator ? '<small class="mu">as ' + esc(d.ekey) + '</small>' : ''}</div><div>Audio consent<b>${d.consent_audio || '-'}</b></div><div>Photos<b>${d.photos}</b></div><div>GPS<b>${d.lat != null ? d.lat.toFixed(3) + ', ' + d.lon.toFixed(3) : 'none'}</b></div></div>
+  <h4>Field status</h4><div class="statusbar"><span class="pill ${{ valid: 'good', recheck: 'warn', test: 'bad', auto: '' }[d.status]}">${{ auto: 'not reviewed', valid: 'confirmed valid', recheck: 'sent back for re-check', test: 'marked as test' }[d.status]}</span>${d.note ? ' <span class="mu">' + esc(d.note) + '</span>' : ''}<div class="btnrow"><button class="sm" data-st="valid">Confirm valid</button><button class="sm warn" data-st="recheck">Needs re-check</button><button class="sm ghost" data-st="test">Mark as test</button>${d.status !== 'auto' ? '<button class="sm ghost" data-st="auto">Reset</button>' : ''}</div></div>
+  ${d.flags.length ? `<h4>Checks that fired</h4>${d.flags.map(f => `<div class="flag ${f.sev} ${f.ack ? 'ack' : ''}"><i class="fa-solid fa-triangle-exclamation"></i><span><b>${esc(d.info[f.k]?.label || f.k)}${f.ack ? ' (acknowledged)' : ''}</b><br>${esc(f.msg)}<br><span class="mu">${esc(d.info[f.k]?.hint || '')}</span></span></div>`).join('')}` : '<div class="mu" style="margin-top:8px">No checks fired for this record.</div>'}
   <h4>Audio &amp; transcript</h4>
   ${d.has_audio ? `<audio id="player" controls preload="none" style="width:100%" ${S.key ? `src="/api/audio/${d.id}?key=${encodeURIComponent(S.key)}"` : ''}></audio>${S.key ? '' : '<button class="sm ghost" id="unlock-audio"><i class="fa-solid fa-lock"></i> Enter admin key to play audio</button>'}` : `<div class="mu">${d.consent_audio === 'no' ? 'Respondent did not consent to audio recording.' : 'No audio attached.'}</div>`}
   ${t ? (t.text ? `<div class="mu" style="margin:6px 0">${esc(t.engine || '')} ${esc(t.model || '')} &middot; language: ${esc(t.language || '?')} &middot; confidence ${t.confidence != null ? pct(t.confidence) : '-'} &middot; status <span class="pill ${t.status === 'done' ? 'good' : t.status === 'review' ? 'warn' : 'bad'}">${t.status}</span>
@@ -288,21 +234,17 @@ async function showInterview(id, seek) {
   $('#drawer-body').querySelectorAll('.seg').forEach(s => s.onclick = () => { if (p) { p.currentTime = +s.dataset.s; p.play().catch(() => { }) } })
   if (p) p.ontimeupdate = () => { let on = null; document.querySelectorAll('.seg').forEach(s => { if (+s.dataset.s <= p.currentTime) on = s; s.classList.remove('on') }); on?.classList.add('on') }
   if (seek && p) p.addEventListener('loadedmetadata', () => { p.currentTime = +seek }, { once: true })
+  $('#drawer-body').querySelectorAll('button[data-st]').forEach(b => b.onclick = async () => {
+    try {
+      let note = ''
+      if (b.dataset.st !== 'auto') { note = prompt('Optional note (e.g. who you spoke to, why):', d.note || '') ; if (note === null) return }
+      const r = await adminCall(`submission/${d.id}/status`, 'POST', { status: b.dataset.st, note }); toast(r.ok ? 'Saved' : (r.error || 'Failed'))
+      showInterview(d.id); if (S.tab !== 'overview') render()
+    } catch (e) { toast(e.message) }
+  })
   $('#drawer-body').querySelectorAll('button[data-act]').forEach(b => b.onclick = async () => {
     try { const r = await adminCall(`transcript/${d.id}/${b.dataset.act}`); toast(r.ok ? 'Done' : (r.error || 'Failed')); showInterview(d.id); S.cfg = await (await fetch('/api/config')).json(); if (S.tab !== 'interviews') render() } catch (e) { toast(e.message) }
   })
-}
-
-VIEWS.quality = async (v) => {
-  const q = await api('quality')
-  if (!q.total) { v.innerHTML = empty('No data yet', ''); return }
-  const KN = { short_duration: 'Interview < 10 min', thin_text: 'Very little open-ended text', test_like: 'Looks like test input', copy_paste: 'Copy-pasted answers', category_mismatch: 'LG category mismatch', region_mismatch: 'Region mismatch', no_audio: 'Audio consent but no recording', no_gps: 'No GPS', gps_outside_uganda: 'GPS outside Uganda', gps_far_from_lg: 'GPS far from declared LG', future_date: 'Date after submission', identical_figures: 'Identical before/after figures', transcript_review: 'Transcript needs review', transcript_note: 'Transcript notes', long_duration: 'Form open > 4h' }
-  const mx = Math.max(1, ...Object.values(q.counts))
-  v.innerHTML = `<div class="kpis">${kpi(pct(q.clean_pct), 'Clean submissions', 'no high-severity flag', 'navy')}${kpi(q.flagged.filter(f => f.high).length, 'Interviews with high-severity flags', 'review or back-check before analysis', 'red')}${kpi(q.enumerators.length, 'Enumerators', '')}</div>
-  <div class="grid g2"><div class="card"><h3>Flag counts</h3><div class="sub">Rule-based checks run on every submission, mirroring the daily completeness/consistency checks in the inception report</div>${Object.entries(q.counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row"><span>${KN[k] || k}</span><div class="bar gold"><i style="width:${100 * n / mx}%"></i></div><span class="n">${n}</span></div>`).join('') || '<div class="mu">No flags raised</div>'}</div>
-  <div class="card"><h3>By enumerator</h3><div class="sub">Short interviews + thin text + missing audio are the usual signs of fabricated or rushed entries</div><div class="tw" style="max-height:300px"><table><thead><tr><th>Enumerator</th><th>n</th><th>Median min</th><th>Avg words</th><th>Audio</th><th>Flagged</th></tr></thead><tbody>${q.enumerators.sort((a, b) => b.flagged - a.flagged).map(e => `<tr><td>${esc(e.enumerator)}</td><td>${e.n}</td><td>${e.median_min ?? '-'}</td><td>${e.avg_words}</td><td>${pct(e.audio_pct)}</td><td>${e.flagged ? `<span class="pill bad">${e.flagged}</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div></div>
-  <div class="card"><h3>Flagged interviews</h3><div class="sub">Click to open</div><div class="tw"><table><thead><tr><th>ID</th><th>LG</th><th>Enumerator</th><th>Date</th><th>Flags</th></tr></thead><tbody>${q.flagged.slice(0, 120).map(f => `<tr class="click" data-i="${f.id}"><td>${f.id}</td><td>${esc(f.label)}</td><td>${esc(f.enumerator || '-')}</td><td>${f.date || '-'}</td><td>${f.flags.map(x => `<span class="pill ${x.sev === 'high' ? 'bad' : x.sev === 'med' ? 'warn' : ''}" title="${esc(x.msg)}">${KN[x.k] || x.k}</span>`).join(' ')}</td></tr>`).join('') || '<tr><td colspan="5" class="mu">None</td></tr>'}</tbody></table></div></div>`
-  v.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => showInterview(+tr.dataset.i))
 }
 
 VIEWS.pipeline = async (v) => {
@@ -342,7 +284,7 @@ async function doSync(force) {
 init()
 
 // ---------------- Map: where interviews were recorded (GPS from the Kobo forms) ----------------
-const MAPCOL = { lg_official: '#1f877d', lg_political_enforcement: '#2f6fb5', trader_association: '#edb14b', national: '#7a5bb5', fgd_informal_traders: '#c0504d' }
+const MAPCOL = { lg_official: '#1f877d', lg_political_enforcement: '#2f6fb5', street_vendor_not_relocated: '#edb14b', trader_association: '#edb14b', national: '#7a5bb5', market_administrator: '#6b8e23', fgd_informal_traders: '#c0504d', fgd_formal_traders: '#d9822b' }
 VIEWS.map = async (v) => {
   const m = await api('map')
   const sm = m.summary

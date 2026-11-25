@@ -77,11 +77,21 @@ export const FIELD_THEME: Record<string, string[]> = {
   m2_fees: ['MKT_AFFORD'], m2_vulnerable: ['INC_WOMEN_YOUTH'], m3_stalls: ['MKT_ALTERNATIVES'], m3_allocation: ['MKT_ALTERNATIVES'],
   m3_amenities: ['MKT_ALTERNATIVES'], m4_conduct: ['IMP_FORCE'], m4_fairness: ['IMP_CONSISTENCY'], m4_events: ['INC_LIVELIHOOD'],
   m5_barriers: ['MKT_LICENSING'], m5_waste_grievance: ['INC_GRIEVANCE', 'URB_SANITATION'], m5_recommendations: ['LRN_RECOMMEND'],
+  // A5: market administrators
+  b2_awareness: ['IMP_CONSULT'], b3_capacity: ['MKT_ALTERNATIVES'], b4_suitability: ['MKT_LOCATION'], c1_governance: ['IMP_COORD'],
+  c2_allocation: ['MKT_ALTERNATIVES'], c3_fees: ['MKT_AFFORD'], d1_infrastructure: ['MKT_ALTERNATIVES'], d2_waste: ['URB_SANITATION'], d3_revenue: ['OSR_COLLECTION'],
+  e1_challenges: ['GOV_POLITICAL'], e2_grievances: ['INC_GRIEVANCE'], e3_worked: ['LRN_PRACTICE'], e4_recommendations: ['LRN_RECOMMEND'],
+  // B2: FGD with formal & licensed traders
+  m1_awareness: ['IMP_CONSULT'], m1_expectations: ['URB_CONGESTION'], m1_engagement: ['IMP_CONSULT'], m2_customer_flow: ['MKT_LOCATION'], m2_competition: ['MKT_LICENSING'],
+  m2_costs: ['MKT_LICENSING'], m3_governance: ['IMP_COORD'], m3_middlemen: ['GOV_CORRUPTION'], m3_waste_utilities: ['URB_SANITATION'], m4_consistency: ['IMP_CONSISTENCY'],
+  m4_dialogue: ['IMP_CONSULT'], m5_digital: ['LRN_PRACTICE'],
+  // A3 (street vendors not relocated)
+  d4_move: ['MKT_ALTERNATIVES'], d5_enforcement: ['IMP_FORCE'],
 }
 // Free-text fields that are never coded or shown (identifiers)
 export const SKIP_TEXT = new Set(['respondent_name', 'enumerator_id', 'interviewee_name', 'interviewer_names', 'facilitator', 'note_taker',
   'designation', 'interviewee_designation', 'interviewee_role_other', 'institution_other', 'activity_other', 'respondent_affiliation_other',
-  'trading_location', 'venue'])
+  'trading_location', 'venue', 'market_name'])
 
 const POS = /\b(improv|better|success|effective|clean(?:er|ed)?|reduc\w* (?:congestion|jam)|increas|cooperat|co-operat|support|good|helpful|organi[sz]ed|adequate|complian|orderly|worked well|benefit|progress|positive|gain|appreciat|accept)/gi
 const NEG = /\b(fail|poor|worse|resist|lack|insufficient|inadequate|corrupt|harass|brutal|loss|lost|declin|drop|conflict|interfer|expensive|unaffordable|too far|hunger|suffer|complain|weak|delay|shortage|confiscat|violen|unrest|tension|struggl|difficult|problem|reluctan|refus|unclear|injunction)/gi

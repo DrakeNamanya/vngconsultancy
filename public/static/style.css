@@ -92,3 +92,24 @@ code,pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}pre{ba
 #report .tr p{margin:3px 0;font-size:13px}#report .tr .t{color:var(--teal);font-family:ui-monospace,monospace;font-size:11px;margin-right:6px}
 .rpt-sec{page-break-inside:avoid}
 @media print{header,#filters,#tabs,.rtool,#drawer,#toast{display:none!important}body{background:#fff}main{padding:0}#report{border:0;padding:0;max-width:none}#report h2{page-break-after:avoid}blockquote{page-break-inside:avoid}.no-print{display:none!important}}
+
+/* ---- field monitoring ---- */
+.kpi .v small{font-size:14px;font-weight:600;color:var(--mu)}
+.prow{display:grid;grid-template-columns:minmax(150px,230px) 1fr 100px;gap:10px;align-items:center;margin:8px 0;font-size:12.5px}
+.prow.click{cursor:pointer}.prow.click:hover .ph{color:var(--teal)}
+.prow .pn{text-align:right;font-weight:600}.prow .ph .mu{display:block;font-size:11px;font-weight:400}
+.bar.red>i{background:var(--red)}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.rcard{border:1px solid var(--bd);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px}.rcard.click{cursor:pointer}.rcard.click:hover{border-color:var(--teal)}
+.rcard span{font-size:22px;font-weight:700;color:var(--navy)}.rcard span small{font-size:12px;color:var(--mu)}
+table.tight th,table.tight td{padding:6px 8px;font-size:12.5px;vertical-align:top}
+table.tight tr.tot td,table.matrix tr.tot td{font-weight:700;background:#f4f7fa}
+table.matrix td.mx{text-align:center;font-weight:700;min-width:54px}table.matrix td.mx small{font-weight:400;color:var(--mu)}
+table.matrix td.mx.ok{background:#cfe8d6}table.matrix td.mx.part{background:#fff1d6}table.matrix td.mx.none{background:#f8e3e3;color:#9a3636}
+table.matrix th small{display:block;font-weight:400;font-size:10.5px;color:var(--mu)}
+.pill.fl-data{background:#e3edf8;color:#2a5b94}.pill.fl-audio{background:#fff1d6;color:#8a5b00}.pill.fl-enumerator{background:#ece5f6;color:#5b3f94}.pill.fl-location{background:#f8e3e3;color:#9a3636}
+.fline{margin:2px 0;padding-left:7px;border-left:3px solid var(--bd);line-height:1.35}.fline.high{border-color:var(--red)}.fline.med{border-color:var(--gold)}
+td.acts{white-space:nowrap}td.acts button{margin-right:3px}
+.statusbar .btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.flag.ack{opacity:.55}
+.toolbar label input[type=checkbox]{width:auto;margin-right:4px}
