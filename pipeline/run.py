@@ -42,11 +42,15 @@ def quality(segs, duration, lang_prob, wanted_lang):
         elif len(counts) / len(texts) < 0.5:
             flags.append("repetition")
     # same short phrase repeated back to back
+    # (one-word fillers such as "Okay." are normal speech: they need a much longer run to count as a loop)
     run = best = 1
+    best_text = texts[0] if texts else ""
     for a, b in zip(texts, texts[1:]):
         run = run + 1 if a == b else 1
-        best = max(best, run)
-    if best >= 3 and "repetition" not in flags:
+        if run > best:
+            best, best_text = run, a
+    short = len(best_text.split()) < 3
+    if ((best >= 3 and not short) or best >= 8) and "repetition" not in flags:
         flags.append("repetition")
     # looping INSIDE segments (whisper often emits one long segment of the same phrase)
     full = " ".join(texts)

@@ -5,6 +5,7 @@ export const page = () => `<!doctype html>
 <title>Trade Order Study | Qualitative Evidence Dashboard</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23142a46'/><path d='M7 22V10m6 12V14m6 8V8m6 14V16' stroke='%231f877d' stroke-width='3' stroke-linecap='round'/></svg>">
 <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
@@ -24,5 +25,7 @@ export const page = () => `<!doctype html>
 <aside id="drawer" class="hidden"><div class="drawer-inner"><button id="drawer-close" class="ghost close"><i class="fa-solid fa-xmark"></i></button><div id="drawer-body"></div></div></aside>
 <div id="toast" class="hidden"></div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/report.js"></script>
 </body></html>`

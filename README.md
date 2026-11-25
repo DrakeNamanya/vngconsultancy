@@ -16,7 +16,7 @@ KoboToolbox ──sync──▶ Hono API (Cloudflare Worker) ──▶ D1 (submi
 * **Transcript gate**: loops/hallucinations, very low confidence or almost no speech put a transcript in **Needs review**. It is excluded from themes until a person accepts it. The server re-checks every upload independently of the worker.
 
 ## Dashboard tabs
-Overview · Field coverage (vs per LG: 4 official KIIs [A1+A2], 2 trader KIIs [A3], 2 FGDs [B1]; A4 national counted separately) · Themes (+ official-vs-trader divergence, emergent terms) · LG comparison heat-map · Evidence & quotes (filterable, CSV export) · Closed questions (by group) · Triangulation (Section D ratings vs Section E figures) · Interviews & audio (player + clickable transcript) · Data quality (flags, per-enumerator) · Pipeline (sync, exports).
+Overview · Field coverage · **Map** (GPS of every interview) (vs per LG: 4 official KIIs [A1+A2], 2 trader KIIs [A3], 2 FGDs [B1]; A4 national counted separately) · Themes (+ official-vs-trader divergence, emergent terms) · LG comparison heat-map · Evidence & quotes (filterable, CSV export) · Closed questions (by group) · Triangulation (Section D ratings vs Section E figures) · Interviews & audio (player + clickable transcript) · Data quality (flags, per-enumerator) · **Report** (themed findings report) · Pipeline (sync, exports).
 
 ## Run locally
 ```bash
@@ -50,3 +50,8 @@ Audio worker env: `WHISPER_BEAM` (default 2). The `small` model needs about 1.5 
 ## Status
 Done: Kobo sync, schema-aware normalisation, audio worker, transcript gate, coding, all dashboard views, exports.
 Not done: no production deploy, coding is keyword-based (no LLM; the workspace LLM proxy is blocked on the free plan), Whisper accuracy on Ugandan-accented English and local languages is unvalidated.
+
+## Map and Report pages
+* **Map** (`#map`, `GET /api/map`): Leaflet + OpenStreetMap. One dot per submission with a GPS fix (Kobo `interview_gps`), coloured by respondent group, with the 20 LG reference points (`src/lgs.json` lat/lon are approximate town centres). GPS outside Uganda's bounding box or more than 50 km from the declared LG is flagged on the map and in Data quality (`gps_outside_uganda`, `gps_far_from_lg`). Respects the region/LG/group filters. Respondent-location data: restrict access before sharing.
+* **Report** (`#report`, `GET /api/report`, `GET /api/report/appendix`): built live from typed answers and audio transcripts. Executive summary, evidence base, method and limitations, charts (themes, dimensions, tone, official-vs-trader), findings by ToR objective > dimension > theme with narrative, quotes with source references (`A1-<id>`, clickable), and the Inception Report literature (`src/literature.json`, mapped by topic in `src/report.ts`, indicative only). Appendices: A all typed answers, B all transcripts (incl. ones in review, clearly labelled), C closed answers. Export: Print/PDF, Word (.doc, charts embedded as images), Markdown.
+* The report text is template-generated from counts; it does not write analytical conclusions. Quotes from transcripts in `review` are never used.

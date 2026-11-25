@@ -13,8 +13,8 @@ const lgName = c => S.cfg.lgs.find(l => l.code === c)?.label || c
 const regName = c => S.cfg.regions[c] || c
 const TABS = [
   ['overview', 'fa-gauge-high', 'Overview'], ['coverage', 'fa-map-location-dot', 'Field coverage'], ['themes', 'fa-tags', 'Themes'],
-  ['heatmap', 'fa-table-cells', 'LG comparison'], ['evidence', 'fa-quote-left', 'Evidence & quotes'], ['quant', 'fa-chart-simple', 'Closed questions'],
-  ['triang', 'fa-scale-balanced', 'Triangulation'], ['interviews', 'fa-microphone-lines', 'Interviews & audio'], ['quality', 'fa-shield-halved', 'Data quality'], ['pipeline', 'fa-gears', 'Pipeline'],
+  ['map', 'fa-location-dot', 'Map'], ['heatmap', 'fa-table-cells', 'LG comparison'], ['evidence', 'fa-quote-left', 'Evidence & quotes'], ['quant', 'fa-chart-simple', 'Closed questions'],
+  ['triang', 'fa-scale-balanced', 'Triangulation'], ['interviews', 'fa-microphone-lines', 'Interviews & audio'], ['quality', 'fa-shield-halved', 'Data quality'], ['report', 'fa-file-lines', 'Report'], ['pipeline', 'fa-gears', 'Pipeline'],
 ]
 
 function qs(extra = {}) {
@@ -296,7 +296,7 @@ async function showInterview(id, seek) {
 VIEWS.quality = async (v) => {
   const q = await api('quality')
   if (!q.total) { v.innerHTML = empty('No data yet', ''); return }
-  const KN = { short_duration: 'Interview < 10 min', thin_text: 'Very little open-ended text', test_like: 'Looks like test input', copy_paste: 'Copy-pasted answers', category_mismatch: 'LG category mismatch', region_mismatch: 'Region mismatch', no_audio: 'Audio consent but no recording', no_gps: 'No GPS', future_date: 'Date after submission', identical_figures: 'Identical before/after figures', transcript_review: 'Transcript needs review', transcript_note: 'Transcript notes', long_duration: 'Form open > 4h' }
+  const KN = { short_duration: 'Interview < 10 min', thin_text: 'Very little open-ended text', test_like: 'Looks like test input', copy_paste: 'Copy-pasted answers', category_mismatch: 'LG category mismatch', region_mismatch: 'Region mismatch', no_audio: 'Audio consent but no recording', no_gps: 'No GPS', gps_outside_uganda: 'GPS outside Uganda', gps_far_from_lg: 'GPS far from declared LG', future_date: 'Date after submission', identical_figures: 'Identical before/after figures', transcript_review: 'Transcript needs review', transcript_note: 'Transcript notes', long_duration: 'Form open > 4h' }
   const mx = Math.max(1, ...Object.values(q.counts))
   v.innerHTML = `<div class="kpis">${kpi(pct(q.clean_pct), 'Clean submissions', 'no high-severity flag', 'navy')}${kpi(q.flagged.filter(f => f.high).length, 'Interviews with high-severity flags', 'review or back-check before analysis', 'red')}${kpi(q.enumerators.length, 'Enumerators', '')}</div>
   <div class="grid g2"><div class="card"><h3>Flag counts</h3><div class="sub">Rule-based checks run on every submission, mirroring the daily completeness/consistency checks in the inception report</div>${Object.entries(q.counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row"><span>${KN[k] || k}</span><div class="bar gold"><i style="width:${100 * n / mx}%"></i></div><span class="n">${n}</span></div>`).join('') || '<div class="mu">No flags raised</div>'}</div>
@@ -340,3 +340,55 @@ async function doSync(force) {
   toast(`Sync complete: ${total} records`); S.cfg = await (await fetch('/api/config')).json(); syncInfo(); render()
 }
 init()
+
+// ---------------- Map: where interviews were recorded (GPS from the Kobo forms) ----------------
+const MAPCOL = { lg_official: '#1f877d', lg_political_enforcement: '#2f6fb5', trader_association: '#edb14b', national: '#7a5bb5', fgd_informal_traders: '#c0504d' }
+VIEWS.map = async (v) => {
+  const m = await api('map')
+  const sm = m.summary
+  if (!sm.total) { v.innerHTML = empty('No submissions in this view yet', 'Run a sync from the <b>Pipeline</b> tab.'); return }
+  const inUg = m.points.filter(p => !p.outside)
+  const out = m.points.filter(p => p.outside)
+  v.innerHTML = `
+  <div class="kpis">
+    ${kpi(sm.with_gps + '/' + sm.total, 'Submissions with GPS', `${sm.without_gps} without a fix (declined, or GPS not captured)`)}
+    ${kpi(inUg.length, 'Inside Uganda', `${inUg.filter(p => p.far).length} more than ${m.far_km} km from the declared LG`, 'navy')}
+    ${kpi(out.length, 'Outside Uganda', 'likely test records or a wrong device location', out.length ? 'red' : 'navy')}
+    ${kpi(m.lgs.filter(l => l.n).length + '/' + m.lgs.length, 'LGs with interviews', 'grey rings = LGs not reached yet', 'gold')}
+  </div>
+  ${out.length ? `<div class="hint warn"><b>${out.length} point${out.length === 1 ? '' : 's'} fall outside Uganda</b> (${out.map(p => '#' + p.id).join(', ')}). They are kept off the map view and listed on the right: usually a tester recording from another place, or a phone that reported a stale location.</div>` : ''}
+  <div class="maplay">
+    <div><div id="map"></div>
+      <div class="legend2">${Object.entries(MAPCOL).map(([g, c]) => `<span><i style="background:${c}"></i>${GRP[g] || g}</span>`).join('')}
+        <span><i style="background:#fff;box-shadow:0 0 0 2px #b94d4d"></i>GPS far from declared LG</span><span><i style="background:#dfe6ee;box-shadow:0 0 0 1px #9aa8b8"></i>Local government (reference)</span></div>
+      <div class="mu" style="font-size:12px">Each dot is the phone position when the interview form was opened (Kobo <code>interview_gps</code>). Accuracy is the phone's own estimate. This is respondent-location data: keep this page restricted to the study team.</div></div>
+    <div class="card" style="margin:0"><h3>Recorded locations</h3><div class="sub">Click a row to zoom to the point</div>
+      <div class="plist">${[...inUg, ...out].map(p => `<div class="pt" data-i="${p.id}"><b>${esc(p.label)} <span class="pill" style="background:${MAPCOL[p.grp] || '#9aa8b8'};color:#fff">${esc(p.form)}</span>${p.outside ? ' <span class="pill bad">outside Uganda</span>' : p.far ? ' <span class="pill warn">' + p.km_from_lg + ' km from LG</span>' : ''}</b>
+        <span class="mu">#${p.id} &middot; ${p.date || '-'} &middot; ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}${p.accuracy != null ? ' &middot; &plusmn;' + Math.round(p.accuracy) + ' m' : ''}</span></div>`).join('') || '<div class="mu">No GPS recorded</div>'}
+      ${m.missing.length ? `<h4 style="margin:12px 0 4px">No GPS (${m.missing.length})</h4>${m.missing.map(p => `<div class="pt" data-i="${p.id}"><b>${esc(p.label)} <span class="pill">${esc(p.form)}</span></b><span class="mu">#${p.id} &middot; ${p.consent === 'no' ? 'declined consent' : 'GPS not captured'}</span></div>`).join('')}` : ''}</div></div>
+  </div>`
+  if (typeof L === 'undefined') { $('#map').innerHTML = empty('Map library could not load', 'Check the internet connection (Leaflet / OpenStreetMap tiles).'); return }
+  const map = L.map('map', { scrollWheelZoom: true })
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map)
+  const b = m.bounds
+  const ug = L.latLngBounds([b.minLat, b.minLon], [b.maxLat, b.maxLon])
+  L.rectangle(ug, { color: '#9aa8b8', weight: 1, fill: false, dashArray: '4' }).addTo(map)
+  m.lgs.forEach(l => L.circleMarker([l.lat, l.lon], { radius: l.n ? 9 : 5, color: l.n ? '#1f877d' : '#9aa8b8', weight: 1.5, fillColor: '#dfe6ee', fillOpacity: .8 }).bindTooltip(`${l.label}${l.n ? ' · ' + l.n + ' interview' + (l.n === 1 ? '' : 's') : ' · none yet'}`).addTo(map))
+  const marks = {}
+  const pop = p => `<b>${esc(p.label)}</b><br>${esc(p.form_name)}<br>${GRP[p.grp] || ''} &middot; ${p.date || '-'}<br>Enumerator: ${esc(p.enumerator || '-')}<br>GPS ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}${p.accuracy != null ? ' (&plusmn;' + Math.round(p.accuracy) + ' m)' : ''}${p.outside ? '<br><span class="neg">Outside Uganda</span>' : p.far ? `<br><span class="neg">${p.km_from_lg} km from ${esc(p.label)}</span>` : ''}<br><a href="#" class="mk-open" data-i="${p.id}">Open interview</a>`
+  m.points.forEach(p => {
+    const mk = L.circleMarker([p.lat, p.lon], { radius: 9, color: p.far || p.outside ? '#b94d4d' : '#fff', weight: p.far || p.outside ? 3 : 2, fillColor: MAPCOL[p.grp] || '#9aa8b8', fillOpacity: .95 }).bindPopup(pop(p))
+    if (!p.outside) mk.addTo(map)
+    marks[p.id] = mk
+  })
+  map.fitBounds(inUg.length ? L.latLngBounds(inUg.map(p => [p.lat, p.lon]).concat(inUg.length < 3 ? [[0.35, 32.58]] : [])).pad(.3) : ug)
+  if (inUg.length === 1) map.setZoom(Math.min(map.getZoom(), 9))
+  map.on('popupopen', e => { const a = e.popup.getElement().querySelector('.mk-open'); if (a) a.onclick = ev => { ev.preventDefault(); showInterview(+a.dataset.i) } })
+  v.querySelectorAll('.pt').forEach(el => el.onclick = () => {
+    const id = +el.dataset.i, p = m.points.find(x => x.id === id), mk = marks[id]
+    if (!p) { showInterview(id); return }
+    if (!map.hasLayer(mk)) mk.addTo(map)
+    map.setView([p.lat, p.lon], p.outside ? 8 : 12); mk.openPopup()
+  })
+  S.charts.push({ destroy: () => map.remove() })
+}

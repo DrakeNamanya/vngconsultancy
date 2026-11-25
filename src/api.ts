@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { Env, forms, fetchAsset, fetchAllData, normalise, buildSchema, koboHeaders } from './kobo'
-import { THEMES, THEME_BY_CODE, DIMENSIONS, OBJECTIVES, codeItems, emergentTerms, SKIP_TEXT } from './codebook'
+import { THEMES, THEME_BY_CODE, DIMENSIONS, OBJECTIVES, codeItems, emergentTerms, SKIP_TEXT, anonymise } from './codebook'
 import SCHEMA from './schema.json'
 import LGS from './lgs.json'
+import LIT from './literature.json'
+import { THEME_LIT } from './report'
 
 const S: any = SCHEMA
 export const app = new Hono<{ Bindings: Env }>()
@@ -312,7 +314,7 @@ app.get('/api/quant', async (c) => {
   return c.json({ forms: flist, form: uid, questions: out, n: subs.length })
 })
 
-app.get('/api/themes', async (c) => {
+async function themeStats(c: any) {
   const cf = codeFilter(c)
   const { results } = await c.env.DB.prepare(`SELECT theme,dimension,polarity,grp,evidence,lg,region,submission_id sid,source FROM codes ${cf.where}`).bind(...cf.b).all()
   const subs = await loadSubs(c, { consented: true })
@@ -331,8 +333,9 @@ app.get('/api/themes', async (c) => {
   }).sort((a, b) => b.interviews - a.interviews)
   const dims = DIMENSIONS.map(d => ({ ...d, interviews: new Set((results as any[]).filter(r => r.dimension === d.id).map(r => r.sid)).size, mentions: (results as any[]).filter(r => r.dimension === d.id).length }))
   const ev: any = {}, pol: any = {}; (results as any[]).forEach(r => { inc(ev, r.evidence); inc(pol, r.polarity) })
-  return c.json({ themes: rows, dimensions: dims, evidence: ev, polarity: pol, n_off: nOff, n_trd: nTrd })
-})
+  return { themes: rows, dimensions: dims, evidence: ev, polarity: pol, n_off: nOff, n_trd: nTrd }
+}
+app.get('/api/themes', async (c) => c.json(await themeStats(c)))
 
 app.get('/api/heatmap', async (c) => {
   const cf = codeFilter(c)
@@ -382,6 +385,23 @@ app.get('/api/triangulation', async (c) => {
   return c.json({ rows, lg: LGROWS, verdicts: verd, officials: subs.length, with_figures: figs })
 })
 
+// ---------- geography helpers ----------
+const UG = { minLat: -1.5, maxLat: 4.3, minLon: 29.5, maxLon: 35.1 }
+const inUganda = (lat: number, lon: number) => lat >= UG.minLat && lat <= UG.maxLat && lon >= UG.minLon && lon <= UG.maxLon
+function km(a: number, b: number, c2: number, d: number) {
+  const r = Math.PI / 180, dl = (c2 - a) * r, dn = (d - b) * r
+  const x = Math.sin(dl / 2) ** 2 + Math.cos(a * r) * Math.cos(c2 * r) * Math.sin(dn / 2) ** 2
+  return 6371 * 2 * Math.asin(Math.sqrt(x))
+}
+const FAR_KM = 50
+function gpsCheck(s: any) {
+  if (s.lat == null || s.lon == null) return { has: false, outside: false, far: false, km: null as number | null }
+  const outside = !inUganda(s.lat, s.lon)
+  const lg = LG_BY[s.lg]
+  const d = lg?.lat != null ? Math.round(km(s.lat, s.lon, lg.lat, lg.lon)) : null
+  return { has: true, outside, far: !outside && d != null && d > FAR_KM, km: d }
+}
+
 // ---------- data quality ----------
 export function qualityFlags(s: any, tr: any) {
   const f: { k: string; sev: 'high' | 'med' | 'low'; msg: string }[] = []
@@ -401,6 +421,11 @@ export function qualityFlags(s: any, tr: any) {
   if (lg && s.region && lg.region !== s.region) f.push({ k: 'region_mismatch', sev: 'high', msg: `Region "${s.region}" does not match ${lg.label} (${lg.region})` })
   if (s.consent_audio === 'yes' && !s.audio_url) f.push({ k: 'no_audio', sev: 'high', msg: 'Audio consent given but no recording attached' })
   if (s.lat == null) f.push({ k: 'no_gps', sev: 'low', msg: 'No GPS captured' })
+  else {
+    const g = gpsCheck(s)
+    if (g.outside) f.push({ k: 'gps_outside_uganda', sev: 'high', msg: `GPS (${s.lat.toFixed(3)}, ${s.lon.toFixed(3)}) is outside Uganda` })
+    else if (g.far) f.push({ k: 'gps_far_from_lg', sev: 'med', msg: `GPS is ${g.km} km from ${lg?.label} (declared local government)` })
+  }
   if (s.interview_date && s.submitted_at && s.interview_date > s.submitted_at.slice(0, 10)) f.push({ k: 'future_date', sev: 'med', msg: 'Interview date is after submission date' })
   if (s.grp === 'lg_official') {
     const nb = ['e1_licenses', 'e1_osr', 'e1_stalls'].filter(p => s.answers[p + '_before'] != null && s.answers[p + '_before'] === s.answers[p + '_after']).length
@@ -461,14 +486,15 @@ app.get('/api/interview/:id', async (c) => {
   })
 })
 
-app.get('/api/emergent', async (c) => {
+async function emergentData(c: any) {
   const subs = await loadSubs(c, { consented: true })
   const docs: { text: string; grp: string }[] = subs.map(s => ({ text: Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v).join(' '), grp: side(s.grp) }))
   const ids = new Map(subs.map((s, i) => [s.id, i]))
   const tr = (await c.env.DB.prepare("SELECT submission_id,text FROM transcripts WHERE status='done'").all()).results as any[]
   tr.forEach(t => { const i = ids.get(t.submission_id); if (i !== undefined) docs[i].text += ' ' + t.text })
-  return c.json({ terms: emergentTerms(docs.filter(d => d.text.length > 20), 70), n: docs.length })
-})
+  return { terms: emergentTerms(docs.filter(d => d.text.length > 20), 70), n: docs.length }
+}
+app.get('/api/emergent', async (c) => c.json(await emergentData(c)))
 app.get('/api/codebook', (c) => c.json({ dimensions: DIMENSIONS, objectives: OBJECTIVES, themes: THEMES.map(t => ({ code: t.code, label: t.label, dim: t.dim, keywords: t.kw })) }))
 
 const csv = (rows: any[][]) => rows.map(r => r.map(x => { const s = x == null ? '' : String(x); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }).join(',')).join('\n')
@@ -490,4 +516,159 @@ app.get('/api/export/submissions.csv', async (c) => {
   subs.forEach(s => rows.push([s.id, fs?.meta?.code, s.lg ? lgLabel(s.lg) : '', s.region, s.grp, s.affiliation, s.interview_date, s.duration_sec ? Math.round(s.duration_sec / 6) / 10 : '', s.enumerator_id, s.consent_interview, s.audio_status, s.text_words,
     ...keys.map(k => { const v = s.answers[k]; if (v == null) return ''; const l = fs.q[k].list; return l ? split(String(v)).map((x: string) => fs.ch[l]?.[x] || x).join('; ') : v })]))
   return new Response(csv(rows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="submissions_${fs?.meta?.code || 'form'}.csv"` } })
+})
+
+// ---------- map (GPS of interviews) ----------
+app.get('/api/map', async (c) => {
+  const subs = await loadSubs(c)
+  const fsm = await formSchemas(c)
+  const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const points: any[] = [], missing: any[] = []
+  const per: any = {}
+  for (const s of subs) {
+    const g = gpsCheck(s)
+    const base = { id: s.id, form: fsm[s.form_uid]?.meta?.code || '', form_name: shortName(fsm[s.form_uid]?.name || ''), grp: s.grp, lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), date: s.interview_date, enumerator: s.enumerator_id, consent: s.consent_interview, audio: s.audio_status }
+    if (!g.has) { missing.push(base); continue }
+    const acc = Number(String(s.answers?.interview_gps || '').split(/\s+/)[3])
+    points.push({ ...base, lat: s.lat, lon: s.lon, accuracy: Number.isFinite(acc) ? acc : null, outside: g.outside, far: g.far, km_from_lg: g.km })
+    if (s.lg) inc(per, s.lg)
+  }
+  const nAll = subs.filter(s => s.lg).length
+  const lgs = (LGS as any[]).map(l => ({ code: l.code, label: l.label, region: l.region, cat: l.cat, lat: l.lat, lon: l.lon, n: subs.filter(s => s.lg === l.code && s.consent_interview !== 'no').length, with_gps: per[l.code] || 0 }))
+  return c.json({
+    points, missing, lgs,
+    summary: { total: subs.length, with_gps: points.length, without_gps: missing.length, outside_uganda: points.filter(p => p.outside).length, far_from_lg: points.filter(p => p.far).length, lg_declared: nAll },
+    bounds: UG, far_km: FAR_KM,
+  })
+})
+
+// ---------- report ----------
+const refOf = (fsm: Record<string, FS>, s: any) => `${fsm[s.form_uid]?.meta?.code || 'X'}-${s.id}`
+const P = (n: number, d: number) => d ? Math.round(100 * n / d) + '%' : '0%'
+
+function pickQuotes(list: any[], byId: Map<number, any>, n = 4) {
+  const key = (r: any) => r.excerpt.slice(0, 60).toLowerCase()
+  const score = (r: any) => { const L = r.excerpt.length; return (L >= 120 && L <= 420 ? 2 : L >= 70 ? 1 : 0) }
+  const sorted = list.filter(r => r.excerpt.length >= 50).sort((a, b) => score(b) - score(a) || b.excerpt.length - a.excerpt.length)
+  const out: any[] = [], subs = new Set<number>(), seen = new Set<string>()
+  const take = (r: any) => { out.push(r); subs.add(r.sid); seen.add(key(r)) }
+  for (const r of sorted) { if (out.length >= n) break; if (!subs.has(r.sid) && !seen.has(key(r))) take(r) }
+  // make sure the trader-side voice is present when it exists
+  if (out.length && !out.some(r => side(byId.get(r.sid)?.grp) === 'trader')) {
+    const t = sorted.find(r => side(byId.get(r.sid)?.grp) === 'trader' && !seen.has(key(r)))
+    if (t) out[out.length - 1] = t
+  }
+  return out
+}
+
+function themeNarrative(t: any, nAll: number, nOff: number, nTrd: number) {
+  const pol = Object.entries<number>(t.polarity || {}).sort((a, b) => b[1] - a[1])
+  const totPol = pol.reduce((a, [, v]) => a + v, 0)
+  const parts: string[] = []
+  parts.push(`${t.label} was raised in ${t.interviews} of ${nAll} interview${nAll === 1 ? '' : 's'} (${P(t.interviews, nAll)}) across ${t.lgs} local government${t.lgs === 1 ? '' : 's'}.`)
+  if (nOff && nTrd) {
+    parts.push(`Official-side respondents: ${t.officials}/${nOff} (${P(t.officials, nOff)}); trader-side respondents: ${t.traders}/${nTrd} (${P(t.traders, nTrd)}).`)
+    if (Math.abs(t.divergence) >= 0.25) parts.push(`This theme is raised notably more often by ${t.divergence > 0 ? 'officials' : 'traders'}, a perception gap worth probing.`)
+  }
+  if (totPol) parts.push(`Tone of coded passages: ${pol.map(([k, v]) => `${v} ${k}`).join(', ')}.`)
+  const ev = Object.entries<number>(t.evidence || {}).map(([k, v]) => `${v} ${k}`).join(', ')
+  if (ev) parts.push(`Evidence basis: ${ev}.`)
+  if (t.interviews < 5) parts.push(`Based on fewer than five interviews, so treat as indicative only.`)
+  return parts.join(' ')
+}
+
+app.get('/api/report', async (c) => {
+  const fsm = await formSchemas(c)
+  const allSubs = await loadSubs(c)
+  const subs = allSubs.filter(s => s.consent_interview !== 'no')
+  const byId = new Map(subs.map(s => [s.id, s]))
+  const th = await themeStats(c)
+  const em = await emergentData(c)
+  const cf = codeFilter(c)
+  const codes = (await c.env.DB.prepare(`SELECT submission_id sid,source,seg_start,theme,polarity,evidence,excerpt FROM codes ${cf.where} ORDER BY id`).bind(...cf.b).all()).results as any[]
+  const per: Record<string, any[]> = {}; codes.forEach(r => { if (r.evidence !== 'inferred') (per[r.theme] ||= []).push(r) })
+  const trAll: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration,model FROM transcripts').all()).results.forEach((t: any) => trAll[t.submission_id] = t)
+  const nAll = subs.length, nOff = th.n_off, nTrd = th.n_trd
+
+  const quote = (r: any) => {
+    const s = byId.get(r.sid)
+    return { text: r.excerpt, ref: s ? refOf(fsm, s) : String(r.sid), sid: r.sid, source: r.source === 'audio' ? 'audio' : 'typed', q: r.source.startsWith('field:') ? qlabel(fsm[s?.form_uid], r.source.slice(6)) : 'Audio transcript', t: r.seg_start, group: GROUP_LABELS[s?.grp] || s?.grp || '', where: s ? whereLabel(s, fsm[s.form_uid]) : '', evidence: r.evidence, polarity: r.polarity }
+  }
+  const themeBy: Record<string, any> = Object.fromEntries(th.themes.map((t: any) => [t.theme, t]))
+  const objectives = OBJECTIVES.map(o => ({
+    id: o.id, label: o.label,
+    dimensions: DIMENSIONS.filter(d => d.obj === o.id).map(d => {
+      const ts = THEMES.filter(t => t.dim === d.id).map(t => {
+        const st = themeBy[t.code]
+        if (!st) return { code: t.code, label: t.label, interviews: 0, quotes: [], lit: (THEME_LIT[t.code] || []) }
+        return { ...st, code: t.code, narrative: themeNarrative(st, nAll, nOff, nTrd), quotes: pickQuotes(per[t.code] || [], byId).map(quote), lit: THEME_LIT[t.code] || [] }
+      }).sort((a: any, b: any) => b.interviews - a.interviews)
+      const dd = th.dimensions.find((x: any) => x.id === d.id)
+      return { id: d.id, label: d.label, color: d.color, interviews: dd?.interviews || 0, mentions: dd?.mentions || 0, themes: ts }
+    }),
+  }))
+
+  // evidence base
+  const formsOut = Object.values(fsm).map(f => {
+    const fsubs = allSubs.filter(s => s.form_uid === f.uid), fc = fsubs.filter(s => s.consent_interview !== 'no')
+    const a: any = {}; fsubs.forEach(s => inc(a, s.audio_status))
+    return { code: f.meta.code || '', name: shortName(f.name), group: GROUP_LABELS[f.meta.group] || f.meta.group || '', kind: f.kind, submissions: fsubs.length, consented: fc.length, declined: fsubs.length - fc.length, audio: a, words: fc.reduce((x, s) => x + (s.text_words || 0), 0) }
+  }).filter(f => f.submissions || true)
+  const trList = Object.values<any>(trAll).filter(t => byId.has(t.submission_id))
+  const lgSet = new Set(subs.map(s => s.lg).filter(Boolean))
+  const caveats: string[] = []
+  const nReview = trList.filter(t => t.status === 'review').length
+  if (nReview) caveats.push(`${nReview} audio transcript${nReview === 1 ? ' is' : 's are'} held in "Needs review" (low confidence, repetition or almost no speech) and ${nReview === 1 ? 'is' : 'are'} NOT coded into the themes until accepted by a person. They are still reproduced in Appendix B for transparency.`)
+  const silent = trList.filter(t => (JSON.parse(t.flags || '[]') as string[]).includes('little_speech')).length
+  if (silent) caveats.push(`${silent} recording${silent === 1 ? '' : 's'} contained little or no speech (possible microphone or consent-to-record problem).`)
+  const noAudio = subs.filter(s => s.consent_audio === 'yes' && !s.audio_url).length
+  if (noAudio) caveats.push(`${noAudio} interview${noAudio === 1 ? '' : 's'} with audio consent have no usable recording attached.`)
+  const gOut = subs.filter(s => gpsCheck(s).outside).length
+  if (gOut) caveats.push(`${gOut} submission${gOut === 1 ? ' has' : 's have'} GPS coordinates outside Uganda (likely test records or a wrong device location).`)
+  const declined = allSubs.length - subs.length
+  if (declined) caveats.push(`${declined} submission${declined === 1 ? ' was' : 's were'} excluded because the respondent declined consent.`)
+  const noLg = subs.filter(s => !s.lg && s.grp !== 'national').length
+  if (noLg) caveats.push(`${noLg} consented submission${noLg === 1 ? ' has' : 's have'} no local government recorded.`)
+  caveats.push('Coding is keyword- and field-based (rule-driven), not human-coded: every theme and tone label is a candidate coding to be verified by the analyst. Speech-to-text accuracy on accented English and local languages has not yet been validated.')
+  if (nAll < 20) caveats.push(`Only ${nAll} interview${nAll === 1 ? '' : 's'} so far: percentages are indicative and cannot support comparisons between local governments.`)
+
+  const ranked = [...th.themes]
+  const top = ranked.slice(0, 5)
+  const split = [...ranked].filter(t => nOff && nTrd && (t.officials || t.traders)).sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence)).filter(t => Math.abs(t.divergence) >= 0.25).slice(0, 4)
+  const neg = [...ranked].filter(t => (t.polarity.negative || 0) > (t.polarity.positive || 0) && t.interviews >= 1).sort((a, b) => (b.polarity.negative || 0) - (a.polarity.negative || 0)).slice(0, 4)
+  const exec: string[] = []
+  exec.push(`This draft synthesises ${nAll} consented interview${nAll === 1 ? '' : 's'}/FGD${nAll === 1 ? '' : 's'} from ${lgSet.size} of ${LGS.length} local governments (${formsOut.filter(f => f.consented).map(f => `${f.consented} ${f.code}`).join(', ')}), covering ${th.themes.length} of ${THEMES.length} codebook themes.`)
+  if (top.length) exec.push(`Most frequently raised: ${top.map(t => `${t.label} (${P(t.interviews, nAll)})`).join('; ')}.`)
+  if (neg.length) exec.push(`Predominantly negative or critical tone: ${neg.map(t => t.label).join('; ')}.`)
+  if (split.length) exec.push(`Largest official-vs-trader perception gaps: ${split.map(t => `${t.label} (${t.divergence > 0 ? 'officials' : 'traders'} ${P(Math.max(t.pct_off, t.pct_trd), 1)} vs ${P(Math.min(t.pct_off, t.pct_trd), 1)})`).join('; ')}.`)
+
+  const coverage = { lgs_covered: lgSet.size, lgs_total: LGS.length, by_lg: Object.entries(subs.reduce((a: any, s) => (s.lg && (a[s.lg] = (a[s.lg] || 0) + 1), a), {})).map(([k, v]) => ({ lg: k, label: lgLabel(k), n: v })).sort((a: any, b: any) => b.n - a.n) }
+  const refs = (LIT as any[]).map(r => ({ n: r.n, cat: r.cat, text: r.text }))
+  const sources = [...subs].sort((a, b) => a.id - b.id).map(s => ({ ref: refOf(fsm, s), id: s.id, form: fsm[s.form_uid]?.meta?.code || '', where: whereLabel(s, fsm[s.form_uid]), group: GROUP_LABELS[s.grp] || s.grp, date: s.interview_date, audio: trAll[s.id]?.status || s.audio_status, words: s.text_words }))
+  const grpCount: any = {}; subs.forEach(s => inc(grpCount, GROUP_LABELS[s.grp] || s.grp))
+  return c.json({
+    generated: new Date().toISOString(), scope: { region: c.req.query('region') || '', lg: c.req.query('lg') || '', grp: c.req.query('grp') || '' },
+    n: nAll, n_officials: nOff, n_traders: nTrd, group_counts: grpCount, executive: exec, caveats, forms: formsOut, coverage,
+    charts: { themes: ranked.slice(0, 12).map(t => ({ label: t.label, interviews: t.interviews, pct: t.pct, off: t.pct_off, trd: t.pct_trd, dim: t.dimension })), dimensions: th.dimensions.map((d: any) => ({ label: d.label, color: d.color, interviews: d.interviews, mentions: d.mentions })), polarity: th.polarity, evidence: th.evidence },
+    objectives, emergent: em.terms.slice(0, 20), references: refs, sources, objectives_labels: OBJECTIVES,
+  })
+})
+
+app.get('/api/report/appendix', async (c) => {
+  const fsm = await formSchemas(c)
+  const subs = (await loadSubs(c, { consented: true })).sort((a, b) => a.id - b.id)
+  const trs: any = {}; (await c.env.DB.prepare('SELECT * FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const items = subs.map(s => {
+    const fs = fsm[s.form_uid]; const order = fs?.order || []
+    const texts = Object.entries<string>(s.texts).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([k, v]) => ({ section: (fs?.q[k]?.sec || '').replace(/^Section\s+/, ''), q: (fs?.q[k]?.l || k).replace(/\s*\(.*$/, ''), v: anonymise(v) }))
+    const closed = Object.entries<any>(s.answers).filter(([k]) => fs?.q[k] && !SKIP_TEXT.has(k) && fs.q[k].t !== 'geopoint').sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .map(([k, v]) => ({ section: (fs!.q[k].sec || '').replace(/^Section\s+/, ''), q: qlabel(fs, k), v: fs!.q[k].list ? split(String(v)).map((x: string) => fs!.ch[fs!.q[k].list]?.[x] || x).join('; ') : String(v) }))
+    const t = trs[s.id]
+    return {
+      ref: refOf(fsm, s), id: s.id, form: fs?.meta?.code || '', form_name: shortName(fs?.name || ''), where: whereLabel(s, fs), group: GROUP_LABELS[s.grp] || s.grp, date: s.interview_date, duration_min: s.duration_sec ? Math.round(s.duration_sec / 6) / 10 : null,
+      words: s.text_words, texts, closed,
+      transcript: t && t.status !== 'rejected' ? { status: t.status, model: t.model, language: t.language, confidence: t.confidence, flags: J(t.flags, []), duration: t.duration, segments: (J(t.segments, []) as any[]).map(x => ({ start: x.start, text: anonymise(x.text) })) } : null,
+    }
+  })
+  return c.json({ items, totals: { typed_answers: items.reduce((a, x) => a + x.texts.length, 0), transcripts: items.filter(x => x.transcript?.segments.length).length, words: items.reduce((a, x) => a + x.words, 0) } })
 })

@@ -3,120 +3,160 @@
   "code": "kcca",
   "label": "KCCA",
   "region": "central",
-  "cat": "city"
+  "cat": "city",
+  "lat": 0.3476,
+  "lon": 32.5825
  },
  {
   "code": "masaka_city",
   "label": "Masaka City",
   "region": "central",
-  "cat": "city"
+  "cat": "city",
+  "lat": -0.3338,
+  "lon": 31.7341
  },
  {
   "code": "mukono_mc",
   "label": "Mukono MC",
   "region": "central",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 0.3533,
+  "lon": 32.7553
  },
  {
   "code": "mubende_mc",
   "label": "Mubende MC",
   "region": "central",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 0.5594,
+  "lon": 31.3958
  },
  {
   "code": "luwero_tc",
   "label": "Luwero TC",
   "region": "central",
-  "cat": "town_council"
+  "cat": "town_council",
+  "lat": 0.8492,
+  "lon": 32.4731
  },
  {
   "code": "mbarara_city",
   "label": "Mbarara City",
   "region": "western",
-  "cat": "city"
+  "cat": "city",
+  "lat": -0.6072,
+  "lon": 30.6545
  },
  {
   "code": "bushenyi_ishaka_mc",
   "label": "Bushenyi-Ishaka MC",
   "region": "western",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": -0.56,
+  "lon": 30.17
  },
  {
   "code": "rubirizi_tc",
   "label": "Rubirizi TC",
   "region": "western",
-  "cat": "town_council"
+  "cat": "town_council",
+  "lat": -0.27,
+  "lon": 30.11
  },
  {
   "code": "kasese_mc",
   "label": "Kasese MC",
   "region": "western",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 0.1833,
+  "lon": 30.0833
  },
  {
   "code": "mbale_city",
   "label": "Mbale City",
   "region": "eastern",
-  "cat": "city"
+  "cat": "city",
+  "lat": 1.0821,
+  "lon": 34.1751
  },
  {
   "code": "jinja_city",
   "label": "Jinja City",
   "region": "eastern",
-  "cat": "city"
+  "cat": "city",
+  "lat": 0.4244,
+  "lon": 33.2041
  },
  {
   "code": "tororo_mc",
   "label": "Tororo MC",
   "region": "eastern",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 0.6928,
+  "lon": 34.181
  },
  {
   "code": "namutumba_tc",
   "label": "Namutumba TC",
   "region": "eastern",
-  "cat": "town_council"
+  "cat": "town_council",
+  "lat": 0.8433,
+  "lon": 33.6853
  },
  {
   "code": "gulu_city",
   "label": "Gulu City",
   "region": "northern",
-  "cat": "city"
+  "cat": "city",
+  "lat": 2.7747,
+  "lon": 32.299
  },
  {
   "code": "lira_city",
   "label": "Lira City",
   "region": "northern",
-  "cat": "city"
+  "cat": "city",
+  "lat": 2.2499,
+  "lon": 32.8998
  },
  {
   "code": "kitgum_mc",
   "label": "Kitgum MC",
   "region": "northern",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 3.2889,
+  "lon": 32.8867
  },
  {
   "code": "kigumba_tc",
   "label": "Kigumba TC",
   "region": "northern",
-  "cat": "town_council"
+  "cat": "town_council",
+  "lat": 1.8,
+  "lon": 31.8
  },
  {
   "code": "arua_city",
   "label": "Arua City",
   "region": "west_nile",
-  "cat": "city"
+  "cat": "city",
+  "lat": 3.0201,
+  "lon": 30.911
  },
  {
   "code": "koboko_mc",
   "label": "Koboko MC",
   "region": "west_nile",
-  "cat": "municipality"
+  "cat": "municipality",
+  "lat": 3.41,
+  "lon": 30.96
  },
  {
   "code": "adjumani_tc",
   "label": "Adjumani TC",
   "region": "west_nile",
-  "cat": "town_council"
+  "cat": "town_council",
+  "lat": 3.377,
+  "lon": 31.79
  }
 ]
