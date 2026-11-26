@@ -45,7 +45,14 @@ const isTrader = g => ['trader', 'trader_association', 'street_vendor_not_reloca
 const EVID = { documented: 'info', observed: 'teal', reported: '', inferred: 'warn' }
 
 async function init() {
-  S.cfg = await (await fetch('/api/config')).json()
+  try {
+    const r = await fetch('/api/config')
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status)
+    S.cfg = await r.json()
+  } catch (e) {
+    $('#view').innerHTML = empty('The dashboard could not reach its database', esc(e.message) + '<br>Check that the D1 database is bound as <code>DB</code> in the Worker settings (Settings, Bindings), then reload.')
+    return
+  }
   $('#f-region').innerHTML += Object.entries(S.cfg.regions).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')
   fillLg()
   $('#f-region').onchange = e => { S.f.region = e.target.value; S.f.lg = ''; fillLg(); render() }

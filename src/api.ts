@@ -6,11 +6,14 @@ import SCHEMA from './schema.json'
 import LGS from './lgs.json'
 import LIT from './literature.json'
 import { THEME_LIT } from './report'
+import { ensureSchema } from './schema'
 import { FORM_TARGETS, TARGET_BY_CODE, targetTotal, enumKey, enumLooksValid, FLAG_INFO, crossFlags, Flag } from './field'
 
 const S: any = SCHEMA
 export const app = new Hono<{ Bindings: Env }>()
 app.use('/api/*', cors())
+app.use('/api/*', async (c, next) => { await ensureSchema(c.env.DB); await next() })
+app.onError((e, c) => { console.error(e); return c.json({ error: String((e as any)?.message || e).slice(0, 300) }, 500) })
 
 const J = (s: any, d: any = null) => { try { return s ? JSON.parse(s) : d } catch { return d } }
 const LG_BY: Record<string, any> = Object.fromEntries((LGS as any[]).map(l => [l.code, l]))
