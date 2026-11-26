@@ -72,8 +72,8 @@ Form metadata (`form_code`, `respondent_group`) comes from hidden calculate fiel
    - Build command: `npm run build`
    - Deploy command: `npx wrangler deploy` (the default)
    - Root directory: `/`
-2. **D1 database.** The config names the database `webapp-production` without an id, so Wrangler creates and binds it on the first deploy. If you already have a D1 database, add its id: `{ "binding": "DB", "database_name": "webapp-production", "database_id": "<id>" }`.
-3. **Database tables.** Created automatically on the first API request (`src/schema.ts`, built from `migrations/*.sql`). You can also apply them by hand with `npx wrangler d1 migrations apply webapp-production --remote`; the two ways are safe to combine. If the page says it cannot reach its database, the D1 binding named `DB` is missing (Worker -> Settings -> Bindings).
+2. **D1 database.** The config names the database `vngconsultancy-db` without an id, so Wrangler creates and binds a new, empty one on the first deploy. Do not point `DB` at a database used by another app: if it already has a different `submissions` table the dashboard shows an explicit message instead of loading. To use an existing empty database, add its id: `{ "binding": "DB", "database_name": "vngconsultancy-db", "database_id": "<id>" }`.
+3. **Database tables.** Created automatically on the first API request (`src/schema.ts`, built from `migrations/*.sql`). You can also apply them by hand with `npx wrangler d1 migrations apply vngconsultancy-db --remote`; the two ways are safe to combine. If the page says it cannot reach its database, the D1 binding named `DB` is missing (Worker -> Settings -> Bindings).
 4. **Secrets** (Worker -> Settings -> Variables and Secrets, type *Secret*):
    - `KOBO_TOKEN`: KoboToolbox API token for the account that owns the forms
    - `INGEST_TOKEN`: admin key you choose (long, random). Needed for sync, re-check/test marking, audio playback, transcript upload.
