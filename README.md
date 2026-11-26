@@ -64,23 +64,26 @@ Marking a record **Valid** keeps its flags but they stop counting as problems. *
 
 Form metadata (`form_code`, `respondent_group`) comes from hidden calculate fields in each Kobo form. Question labels and choices are stored in D1 at sync.
 
-## Deploy to Cloudflare (Workers & Pages, connected to GitHub)
+## Deploy to Cloudflare (Workers, connected to GitHub)
 
-1. **Create the D1 database** (once): `npx wrangler d1 create webapp-production`. Copy the `database_id` into `wrangler.jsonc` (`d1_databases[0].database_id`, currently the placeholder `local-placeholder`) and commit.
-2. **Apply migrations to production D1**: `npx wrangler d1 migrations apply webapp-production --remote` (files in `migrations/`: 0001 base schema, 0002 field monitoring columns).
-3. **Connect the repo** in Cloudflare (Workers & Pages -> Create -> Pages -> Connect to Git -> this repository, branch `main`):
+`wrangler.jsonc` is set up for a **Workers** project (`main: dist/_worker.js`, static files from `public/` via the `ASSETS` binding). Cloudflare's default deploy command `npx wrangler deploy` works as is.
+
+1. **Connect the repo** (Workers & Pages -> Create -> Import a repository -> this repo, branch `main`):
    - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Node version: 20 or newer
-4. **Bind D1** in the Pages project: Settings -> Bindings -> D1 database, variable name `DB`, database `webapp-production` (needed if the binding is not picked up from `wrangler.jsonc`).
-5. **Set secrets** (Settings -> Variables and Secrets, type *Secret*):
+   - Deploy command: `npx wrangler deploy` (the default)
+   - Root directory: `/`
+2. **D1 database.** The config names the database `webapp-production` without an id, so Wrangler creates and binds it on the first deploy. If you already have a D1 database, add its id: `{ "binding": "DB", "database_name": "webapp-production", "database_id": "<id>" }`.
+3. **Apply migrations to production D1** (once, and after any new file in `migrations/`):
+   `npx wrangler d1 migrations apply webapp-production --remote`
+   (or paste `migrations/0001_*.sql` then `0002_*.sql` into the D1 console). Until this is done, API calls return 500 `no such table`.
+4. **Secrets** (Worker -> Settings -> Variables and Secrets, type *Secret*):
    - `KOBO_TOKEN`: KoboToolbox API token for the account that owns the forms
    - `INGEST_TOKEN`: admin key you choose (long, random). Needed for sync, re-check/test marking, audio playback, transcript upload.
-6. Open the site, go to **Pipeline**, enter the admin key when asked, press **Sync now**.
-7. **Protect the site.** Read endpoints are open and the data includes interview content and GPS. Put Cloudflare Access (Zero Trust) in front of the whole site, or at least `/api/*` and `/`.
-8. Rotate any Kobo token or password that has been shared in chat or email.
+5. Open the site, go to **Pipeline**, enter the admin key when asked, press **Sync now**.
+6. **Protect the site.** Read endpoints are open and the data includes interview content and GPS. Put Cloudflare Access (Zero Trust) in front of the whole site, or at least `/api/*` and `/`.
+7. Rotate any Kobo token or password that has been shared in chat or email.
 
-Notes: no KV and no cron triggers are used (compatible with hosted deploy). The audio worker cannot run on Cloudflare.
+Notes: no KV and no cron triggers are used. The audio worker cannot run on Cloudflare. If you prefer a **Pages** project instead, replace `main`/`assets` in `wrangler.jsonc` with `"pages_build_output_dir": "./dist"` and deploy with `npx wrangler pages deploy dist`.
 
 ## Audio transcription worker (separate machine)
 Needs Python 3.9+, ffmpeg, and **at least 4 GB RAM** for the `small` model (a 1 GB machine will swap and be very slow; use `--model base` there).
