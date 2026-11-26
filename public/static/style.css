@@ -113,3 +113,9 @@ td.acts{white-space:nowrap}td.acts button{margin-right:3px}
 .statusbar .btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .flag.ack{opacity:.55}
 .toolbar label input[type=checkbox]{width:auto;margin-right:4px}
+
+/* transcription tab */
+.tr-now{background:var(--teal-l);border-radius:8px;padding:10px 12px;margin:8px 0}.tr-now .bar{margin:6px 0 2px}
+.tabs-mini{display:flex;gap:6px;margin:10px 0 6px}.tabs-mini button{background:#eef2f7;color:var(--tx);border:0;padding:5px 12px;border-radius:999px;font-size:12px;cursor:pointer}.tabs-mini button.on{background:var(--teal);color:#fff}
+.hit{padding:8px 10px;border-bottom:1px solid #eef2f7;cursor:pointer;font-size:13px}.hit:hover{background:#f6f9fb}.hit mark{background:#ffe9a8;padding:0 1px}
+td.bad-t{color:#9a3636;font-weight:600}button.sm{padding:2px 8px;font-size:11px}

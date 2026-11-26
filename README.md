@@ -38,6 +38,7 @@ Targets, minimum plausible session lengths and all error thresholds are in **`sr
 | Enumerators | One row per normalised ID: forms, LGs, active days, median session, words, audio, GPS, errors; click for their submissions |
 | Errors & review | Queue of flagged records with plain-language hints; filter by type (data / audio / enumerator / location); mark Valid / Re-check / Test (admin key); CSV export |
 | Submissions & audio | All records with filters; drawer with audio player, clickable transcript, answers, checks, field status |
+| Transcription | Worker online/offline with live progress, setup commands (Windows, Mac/Linux, Colab), priority queue (thinnest typed notes first), typed vs spoken words per interview, accept/reject/re-run transcripts, search across typed and spoken text |
 | Map | GPS of every interview (Leaflet + OpenStreetMap), coloured by form group |
 | Themes, LG comparison, Evidence & quotes, Closed questions, Triangulation | Qualitative analysis views |
 | Report | Findings report (print/PDF, Word, Markdown) |
@@ -84,15 +85,21 @@ Form metadata (`form_code`, `respondent_group`) comes from hidden calculate fiel
 Notes: no KV and no cron triggers are used. The audio worker cannot run on Cloudflare. If you prefer a **Pages** project instead, replace `main`/`assets` in `wrangler.jsonc` with `"pages_build_output_dir": "./dist"` and deploy with `npx wrangler pages deploy dist`.
 
 ## Audio transcription worker (separate machine)
-Needs Python 3.9+, ffmpeg, and **at least 4 GB RAM** for the `small` model (a 1 GB machine will swap and be very slow; use `--model base` there).
+Interviewers type only short notes for open-ended questions, so the recordings hold most of the content. The worker turns them into text; accepted transcripts feed themes, quotes and the report. Progress, queue and setup commands are on the dashboard's **Transcription** tab.
+
+Needs Python 3.9+ and **about 4 GB free RAM** (or a CUDA GPU, detected automatically: large-v3-turbo, 10 to 20 times faster). ffmpeg is **not** needed.
 ```bash
-pip install -r pipeline/requirements.txt
-export DASH_URL=https://<your-site>      # or http://localhost:3000
+pip install -r pipeline/requirements.txt          # faster-whisper numpy requests av
+curl -O https://<your-site>/worker.py             # the dashboard serves the script (copied from pipeline/run.py at build)
+export DASH_URL=https://<your-site>               # or http://localhost:3000
 export ADMIN_KEY=<INGEST_TOKEN>
-export WHISPER_BEAM=1                    # faster; 2 is slightly more accurate
-python pipeline/run.py --model small --loop     # keeps polling every 2 minutes
+python worker.py --loop                           # --model medium for accuracy, --ids 123,456 to redo specific interviews
 ```
-Audio is downloaded through the dashboard proxy (the Kobo token never leaves the server) and deleted after processing. Transcripts that look unreliable go to **Needs review** and are excluded from coding until a person accepts them. Do not restart the dashboard while the worker is mid-file: re-queue with `POST /api/pipeline/status {"id":<submission id>,"status":"pending"}`.
+- Queue order: interviews with the thinnest typed notes first. Each recording is claimed atomically, so two workers never do the same file. A claim not refreshed for 30 min returns to the queue.
+- Recordings from KoboCollect often contain damaged AAC packets. The worker decodes packet by packet, replaces damaged parts with silence, and flags `damaged_audio` when 5% or more is lost.
+- Audio is streamed through the dashboard proxy (the Kobo token never leaves the server) and deleted after processing.
+- Transcripts that look unreliable (loops, low confidence, little speech) go to **Needs review** and are excluded from coding until a person accepts them.
+- The worker sends a heartbeat every ~20 s (`POST /api/pipeline/heartbeat`), shown as Online/Offline with current file and speed.
 
 ## Run locally
 ```bash
@@ -104,7 +111,8 @@ pm2 start ecosystem.config.cjs            # http://localhost:3000
 
 ## Main endpoints
 `GET /api/field` (overview), `/api/coverage` (LG x form vs target), `/api/enumerators`, `/api/quality` (error queue), `/api/interviews`, `/api/interview/:id`, `/api/map`, `/api/report`, `/api/themes`, `/api/forms`, `/api/config`.
-Admin (`x-admin-key`): `POST /api/sync`, `/api/recode`, `/api/submission/:id/status` `{status: auto|valid|recheck|test, note}`, `/api/transcript/:id/accept|reject|requeue`, `GET /api/audio/:id`.
+Admin (`x-admin-key`): `POST /api/sync`, `/api/recode`, `/api/submission/:id/status` `{status: auto|valid|recheck|test, note}`, `/api/transcript/:id/accept|reject|requeue`, `GET /api/audio/:id`, worker: `GET /api/pipeline/pending[?ids=]`, `POST /api/pipeline/claim|heartbeat|transcript|status`.
+Public reads: `GET /api/transcription` (worker, queue, typed vs spoken words), `GET /api/search?q=` (typed + spoken text).
 
 ## Data model (D1)
 `forms` (schema per form), `submissions` (normalised record, `field_status`, `field_note`), `transcripts` (text, segments, status, flags), `codes` (coded evidence segments), `meta`.

@@ -56,6 +56,7 @@ export const FLAG_INFO: Record<string, { label: string; hint: string; group: 'da
   no_audio: { label: 'Audio consent but no recording', hint: 'Recording is missing from the submission. Ask the team to re-upload or re-record.', group: 'audio' },
   audio_short: { label: 'Recording much shorter than session', hint: 'Recording may have stopped early.', group: 'audio' },
   transcript_review: { label: 'Transcript needs review', hint: 'Automatic text failed quality checks (silence, noise, loops). Listen and accept/reject.', group: 'audio' },
+  damaged_audio: { label: 'Recording partly damaged', hint: 'The phone saved a corrupted recording, so some speech cannot be recovered. Re-record key answers or follow up with the respondent.', group: 'audio' },
   transcript_note: { label: 'Transcript notes', hint: 'Minor transcript warnings.', group: 'audio' },
   no_gps: { label: 'No GPS captured', hint: 'Location not recorded: cannot verify where the interview took place.', group: 'location' },
   gps_outside_uganda: { label: 'GPS outside Uganda', hint: 'Location is not in Uganda: test record or wrong device location.', group: 'location' },

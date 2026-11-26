@@ -28,5 +28,6 @@ export const page = () => `<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/field.js"></script>
+<script src="/static/transcribe.js"></script>
 <script src="/static/report.js"></script>
 </body></html>`

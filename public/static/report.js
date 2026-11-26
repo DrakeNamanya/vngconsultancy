@@ -16,8 +16,8 @@ function reportHTML(r, ap, opt) {
   // 1 evidence base
   sec.push(`<h2>1. Evidence base</h2>
     <p>The report draws on every submission synced from the connected KoboToolbox forms: <b>typed answers</b> to open-ended questions and the <b>audio recordings converted to text</b> (speech-to-text). Respondent names, enumerator IDs, contacts and venues are never quoted. Source references such as <a class="ref" data-i="${(r.sources[0] || {}).id}">[${esc((r.sources[0] || {}).ref || 'A1-0000')}]</a> are clickable and open the full interview.</p>
-    <div class="tw"><table><thead><tr><th>Form</th><th>Respondent group</th><th>Submissions</th><th>Consented</th><th>Declined</th><th>Audio status</th><th>Typed words</th></tr></thead><tbody>
-    ${r.forms.map(f => `<tr><td>${esc(f.code)}</td><td>${esc(f.group)}<div class="mu" style="font-size:11px">${esc(f.name)}</div></td><td>${f.submissions}</td><td>${f.consented}</td><td>${f.declined}</td><td>${Object.entries(f.audio).map(([k, n]) => `${n} ${(AUD[k] || [k])[0].toLowerCase()}`).join(', ') || '-'}</td><td>${fmt(f.words)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Form</th><th>Respondent group</th><th>Submissions</th><th>Consented</th><th>Declined</th><th>Audio status</th><th>Typed words</th><th>Spoken words</th></tr></thead><tbody>
+    ${r.forms.map(f => `<tr><td>${esc(f.code)}</td><td>${esc(f.group)}<div class="mu" style="font-size:11px">${esc(f.name)}</div></td><td>${f.submissions}</td><td>${f.consented}</td><td>${f.declined}</td><td>${Object.entries(f.audio).map(([k, n]) => `${n} ${(AUD[k] || [k])[0].toLowerCase()}`).join(', ') || '-'}</td><td>${fmt(f.words)}</td><td>${f.spoken_words ? fmt(f.spoken_words) : '<span class="mu">-</span>'}</td></tr>`).join('')}</tbody></table></div>
     <p>Coverage: <b>${r.coverage.lgs_covered}</b> of ${r.coverage.lgs_total} local governments${r.coverage.by_lg.length ? ' (' + r.coverage.by_lg.map(x => `${esc(x.label)} ${x.n}`).join(', ') + ')' : ''}. Interviews analysed: <b>${r.n}</b> (${Object.entries(r.group_counts).map(([g, n]) => `${n} ${esc(g)}`).join(', ') || 'none'}).</p>
     <div class="chartbox"><canvas id="rc-forms" height="110"></canvas><div class="figcap">Figure 1. Consented interviews by form (A1-A4 key informants, B1 focus group).</div></div>`)
 
@@ -56,7 +56,7 @@ function reportHTML(r, ap, opt) {
   sec.push(`<h2>6. References</h2><h4>6.1 Literature and policy documents (from the Inception Report, section 11)</h4>
     ${cats.map(c => `<b style="font-size:12.5px">${esc(c)}</b><ol class="refs" style="margin-top:2px">${r.references.filter(x => x.cat === c).map(x => `<li value="${x.n}" id="ref-${x.n}">${esc(x.text)}</li>`).join('')}</ol>`).join('')}
     <h4>6.2 Primary sources: interviews and FGDs analysed</h4>
-    <div class="tw"><table><thead><tr><th>Ref.</th><th>Where / who</th><th>Group</th><th>Date</th><th>Audio</th><th>Typed words</th></tr></thead><tbody>${r.sources.map(s => `<tr><td><a class="ref" data-i="${s.id}">${esc(s.ref)}</a></td><td>${esc(s.where)}</td><td>${esc(s.group)}</td><td>${s.date || '-'}</td><td>${esc((AUD[s.audio] || [s.audio])[0])}</td><td>${s.words}</td></tr>`).join('') || '<tr><td colspan="6" class="mu">None</td></tr>'}</tbody></table></div>`)
+    <div class="tw"><table><thead><tr><th>Ref.</th><th>Where / who</th><th>Group</th><th>Date</th><th>Audio</th><th>Typed words</th><th>Spoken words</th></tr></thead><tbody>${r.sources.map(s => `<tr><td><a class="ref" data-i="${s.id}">${esc(s.ref)}</a></td><td>${esc(s.where)}</td><td>${esc(s.group)}</td><td>${s.date || '-'}</td><td>${esc((AUD[s.audio] || [s.audio])[0])}</td><td>${s.words}</td><td>${s.spoken != null ? fmt(s.spoken) : '-'}</td></tr>`).join('') || '<tr><td colspan="7" class="mu">None</td></tr>'}</tbody></table></div>`)
 
   // appendices
   if (opt.appendix && ap) {

@@ -12,7 +12,7 @@ const DIMCOL = () => Object.fromEntries(S.cfg.dimensions.map(d => [d.id, d.color
 const lgName = c => S.cfg.lgs.find(l => l.code === c)?.label || c
 const regName = c => S.cfg.regions[c] || c
 const TABS = [
-  ['overview', 'fa-gauge-high', 'Field overview'], ['coverage', 'fa-table-cells-large', 'Coverage vs target'], ['enumerators', 'fa-user-group', 'Enumerators'], ['errors', 'fa-triangle-exclamation', 'Errors & review'],
+  ['overview', 'fa-gauge-high', 'Field overview'], ['coverage', 'fa-table-cells-large', 'Coverage vs target'], ['enumerators', 'fa-user-group', 'Enumerators'], ['errors', 'fa-triangle-exclamation', 'Errors & review'], ['transcription', 'fa-waveform-lines', 'Transcription'],
   ['interviews', 'fa-microphone-lines', 'Submissions & audio'], ['map', 'fa-location-dot', 'Map'], ['themes', 'fa-tags', 'Themes'], ['heatmap', 'fa-table-cells', 'LG comparison'],
   ['evidence', 'fa-quote-left', 'Evidence & quotes'], ['quant', 'fa-chart-simple', 'Closed questions'], ['triang', 'fa-scale-balanced', 'Triangulation'], ['report', 'fa-file-lines', 'Report'], ['pipeline', 'fa-gears', 'Pipeline'],
 ]
@@ -264,14 +264,16 @@ VIEWS.pipeline = async (v) => {
     <button id="b-sync"><i class="fa-solid fa-rotate"></i> Sync now</button> <button id="b-force" class="ghost">Re-import everything</button> <button id="b-recode" class="ghost">Re-run coding</button><div id="sync-out" class="mu" style="margin-top:8px"></div></div>
   <div class="card" style="grid-column:1/-1"><h3><i class="fa-solid fa-list-check"></i> Connected KoboToolbox forms</h3><div class="sub">Each form is fetched with its own question set. Kobo count = submissions on the server; in dashboard = imported.</div><div class="tw"><table><thead><tr><th>Code</th><th>Form</th><th>Type</th><th>Kobo</th><th>In dashboard</th><th>With audio</th><th>Status</th></tr></thead><tbody>${fm.map(f => `<tr><td><span class="pill">${esc(f.code || '?')}</span></td><td>${esc(f.name)}<div class="mu" style="font-size:11px">${f.uid}</div></td><td>${f.kind.toUpperCase()}</td><td>${f.kobo_count ?? '-'}</td><td>${f.in_dashboard}</td><td>${f.with_audio}</td><td>${!f.synced ? '<span class="pill warn">not synced yet</span>' : f.kobo_count === 0 ? '<span class="pill">empty on Kobo</span>' : f.in_dashboard >= f.kobo_count ? '<span class="pill good">up to date</span>' : '<span class="pill warn">' + (f.kobo_count - f.in_dashboard) + ' to import</span>'}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card"><h3><i class="fa-solid fa-waveform-lines"></i> 2 &middot; Audio transcription</h3><div class="sub">Runs outside the dashboard: audio is too heavy for the edge runtime.</div>${audioBar(o.audio)}<div class="legend">${audioLegend(o.audio)}</div>
-    <p style="font-size:12.5px">Run on any machine with Python 3.9+ and ffmpeg:</p><pre>pip install faster-whisper numpy requests
+    <p style="font-size:12.5px">Runs on any computer with Python 3.9+ (about 4 GB RAM, or a GPU). Full instructions, live worker status and the priority queue are on the <a href="#transcription" id="to-tr"><b>Transcription</b> tab</a>.</p><pre>pip install faster-whisper numpy requests av
+curl -O ${location.origin}/worker.py
 export DASH_URL=${location.origin}
 export ADMIN_KEY=&lt;INGEST_TOKEN&gt;
-python pipeline/run.py --model small --loop</pre>
+python worker.py --loop</pre>
     <p class="mu" style="font-size:12px">Transcripts that look unreliable (repetition loops, very low confidence, almost no speech) are held in <b>Needs review</b> and do <u>not</u> feed the themes until a person accepts them.</p></div>
   <div class="card"><h3><i class="fa-solid fa-download"></i> Exports</h3><div class="sub">For the evidence matrix and further analysis in Excel / NVivo / R</div>
     <p><a href="/api/export/codes.csv?${qs()}" download><button class="ghost" type="button">Coded evidence (CSV)</button></a> <a href="/api/export/submissions.csv?${qs()}" download><button class="ghost" type="button">Closed answers (CSV)</button></a></p>
     <p class="mu" style="font-size:12px">Codebook: <a href="/api/codebook" target="_blank">/api/codebook</a></p></div></div>`
+  $('#to-tr') && ($('#to-tr').onclick = e => { e.preventDefault(); goTab('transcription') })
   const run = async (b, fn) => { b.disabled = true; try { await fn() } catch (e) { toast(e.message) } b.disabled = false }
   $('#b-sync').onclick = e => run(e.target, () => doSync(false))
   $('#b-force').onclick = e => run(e.target, () => doSync(true))

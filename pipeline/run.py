@@ -149,7 +149,7 @@ def transcribe(model, path, a, lang, prog):
     prog.update(declared=audio.declared, done_s=0.0)
     segs, offset, info = [], 0.0, None
     for chunk in audio.chunks():
-        kw = dict(beam_size=a.beam, language=lang, vad_filter=True, condition_on_previous_text=False, temperature=0.0,
+        kw = dict(beam_size=a.beam, language=lang, vad_filter=True, condition_on_previous_text=False, temperature=[0.0, 0.2, 0.4],
                   compression_ratio_threshold=2.2, no_speech_threshold=0.6)
         if a.hotwords:
             kw["hotwords"] = a.hotwords

@@ -156,13 +156,45 @@ function audioCodes(env: Env, s: any, segs: { start: number; text: string }[]) {
 }
 
 // ---------- pipeline endpoints (used by pipeline/run.py) ----------
+// Recordings stuck in "processing" (worker crashed / machine switched off) go back to the queue after 30 min
+async function recoverStale(c: any) {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  const { results } = await c.env.DB.prepare(`SELECT s.id FROM submissions s LEFT JOIN meta m ON m.key='claim:'||s.id WHERE s.audio_status='processing' AND (m.value IS NULL OR m.value < ?)`).bind(cutoff).all()
+  if (!results.length) return 0
+  await c.env.DB.batch((results as any[]).flatMap(r => [c.env.DB.prepare("UPDATE submissions SET audio_status='pending' WHERE id=?").bind(r.id), c.env.DB.prepare('DELETE FROM meta WHERE key=?').bind('claim:' + r.id)]))
+  return results.length
+}
+// Queue order: recordings whose typed notes are thinnest come first (the audio adds the most there), then oldest
+const queueRows = async (c: any, statuses: string[], ids: number[] = []) => {
+  const ph = statuses.map(() => '?').join(',')
+  const rows = (await c.env.DB.prepare(`SELECT id,audio_url,audio_name,lg,grp,text_words,duration_sec,audio_status,consent_audio FROM submissions WHERE is_demo=0 AND field_status!='test' AND consent_interview!='no' AND audio_url IS NOT NULL AND audio_status IN (${ph})`).bind(...statuses).all()).results as any[]
+  const list = ids.length ? rows.filter(r => ids.includes(r.id)) : rows
+  return list.map(r => ({ ...r, gap: Math.max(0, (THIN[r.grp] ?? 60) - (r.text_words || 0)) })).sort((a, b) => b.gap - a.gap || a.id - b.id)
+}
 app.get('/api/pipeline/pending', admin, async (c) => {
-  const lim = Number(c.req.query('limit') || 20)
-  const { results } = await c.env.DB.prepare(`SELECT id,audio_url,audio_name,lg,grp FROM submissions WHERE is_demo=0 AND audio_status IN ('pending','failed') AND audio_url IS NOT NULL ORDER BY id LIMIT ?`).bind(lim).all()
-  return c.json({ items: results })
+  await recoverStale(c)
+  const lim = Math.min(Number(c.req.query('limit') || 20), 100)
+  const ids = (c.req.query('ids') || '').split(',').map(Number).filter(Boolean)
+  const rows = await queueRows(c, ids.length ? ['pending', 'failed', 'review', 'done', 'rejected'] : ['pending', 'failed'], ids)
+  return c.json({ items: rows.slice(0, lim).map(r => ({ id: r.id, audio_url: r.audio_url, audio_name: r.audio_name, lg: r.lg, grp: r.grp, text_words: r.text_words, duration_sec: r.duration_sec })) })
+})
+// Atomic claim so two workers (or two runs) never transcribe the same recording
+app.post('/api/pipeline/claim', admin, async (c) => {
+  const b = await c.req.json(); const id = Number(b.id)
+  const r = await c.env.DB.prepare(`UPDATE submissions SET audio_status='processing' WHERE id=? AND (audio_status IN ('pending','failed') OR ?=1)`).bind(id, b.force ? 1 : 0).run()
+  const ok = (r.meta?.changes || 0) > 0
+  if (ok) await c.env.DB.prepare(`INSERT INTO meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind('claim:' + id, new Date().toISOString()).run()
+  return c.json({ claimed: ok })
+})
+app.post('/api/pipeline/heartbeat', admin, async (c) => {
+  const b = await c.req.json(); const host = String(b.host || 'worker').slice(0, 60)
+  await c.env.DB.prepare(`INSERT INTO meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind('worker:' + host, JSON.stringify({ ...b, host, seen: new Date().toISOString() })).run()
+  if (b.current?.id) await c.env.DB.prepare(`INSERT INTO meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind('claim:' + b.current.id, new Date().toISOString()).run()
+  return c.json({ ok: true })
 })
 app.post('/api/pipeline/status', admin, async (c) => {
   const b = await c.req.json()
+  await c.env.DB.prepare('DELETE FROM meta WHERE key=?').bind('claim:' + b.id).run()
   await c.env.DB.prepare('UPDATE submissions SET audio_status=? WHERE id=?').bind(b.status, b.id).run()
   if (b.status === 'failed' && b.error) await c.env.DB.prepare(`INSERT INTO transcripts (submission_id,status,error,created_at) VALUES (?,?,?,?) ON CONFLICT(submission_id) DO UPDATE SET status=excluded.status,error=excluded.error`).bind(b.id, 'failed', String(b.error).slice(0, 500), new Date().toISOString()).run()
   return c.json({ ok: true })
@@ -186,6 +218,7 @@ app.post('/api/pipeline/transcript', admin, async (c) => {
     c.env.DB.prepare("DELETE FROM codes WHERE submission_id=? AND source='audio'").bind(s.id),
   ]
   if (status === 'done') st.push(...audioCodes(c.env, s, segs))
+  st.push(c.env.DB.prepare('DELETE FROM meta WHERE key=?').bind('claim:' + s.id))
   await c.env.DB.batch(st)
   return c.json({ ok: true, status })
 })
@@ -201,9 +234,57 @@ app.post('/api/transcript/:id/:action', admin, async (c) => {
     await c.env.DB.batch([c.env.DB.prepare("UPDATE transcripts SET status='rejected' WHERE submission_id=?").bind(id), c.env.DB.prepare("UPDATE submissions SET audio_status='rejected' WHERE id=?").bind(id),
       c.env.DB.prepare("DELETE FROM codes WHERE submission_id=? AND source='audio'").bind(id)])
   } else if (act === 'requeue') {
-    await c.env.DB.batch([c.env.DB.prepare("UPDATE submissions SET audio_status='pending' WHERE id=?").bind(id), c.env.DB.prepare("DELETE FROM codes WHERE submission_id=? AND source='audio'").bind(id)])
+    await c.env.DB.batch([c.env.DB.prepare("UPDATE submissions SET audio_status='pending' WHERE id=?").bind(id), c.env.DB.prepare("UPDATE transcripts SET status='pending' WHERE submission_id=?").bind(id), c.env.DB.prepare("DELETE FROM codes WHERE submission_id=? AND source='audio'").bind(id)])
   } else return c.json({ error: 'bad action' }, 400)
   return c.json({ ok: true })
+})
+
+// ---------- Transcription view: worker status, priority queue, how much the audio adds ----------
+const wc = (t: string) => (String(t || '').trim().match(/\S+/g) || []).length
+app.get('/api/transcription', async (c) => {
+  const recovered = await recoverStale(c)
+  const subs = (await loadSubs(c, { consented: true, raw: true })).filter((s: any) => s.audio_url || s.consent_audio === 'yes')
+  const fsm = await formSchemas(c)
+  const trs: any = {}; (await c.env.DB.prepare(`SELECT submission_id,status,model,confidence,duration,flags,language,created_at,error,LENGTH(TRIM(COALESCE(text,'')))-LENGTH(REPLACE(TRIM(COALESCE(text,'')),' ',''))+1 AS words FROM transcripts`).all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const claims: any = {}; (await c.env.DB.prepare("SELECT key,value FROM meta WHERE key LIKE 'claim:%'").all()).results.forEach((r: any) => claims[r.key.slice(6)] = r.value)
+  const wk = (await c.env.DB.prepare("SELECT value FROM meta WHERE key LIKE 'worker:%'").all()).results.map((r: any) => J(r.value, null)).filter(Boolean)
+    .map((w: any) => ({ ...w, age_s: Math.round((Date.now() - Date.parse(w.seen)) / 1000) })).sort((a: any, b: any) => a.age_s - b.age_s)
+  const items = subs.map((s: any) => {
+    const t = trs[s.id]; const gap = Math.max(0, (THIN[s.grp] ?? 60) - (s.text_words || 0))
+    const spoken = t && (t.status === 'done' || t.status === 'review') ? t.words || 0 : null
+    return { id: s.id, form: s.code, form_name: shortName(fsm[s.form_uid]?.name || ''), lg: s.lg, label: whereLabel(s, fsm[s.form_uid]), enumerator: s.enumerator_id, ekey: enumKey(s.enumerator_id), date: s.interview_date, grp: s.grp,
+      status: s.audio_url ? s.audio_status : 'missing', session_min: s.duration_sec ? Math.round(s.duration_sec / 6) / 10 : null, typed_words: s.text_words || 0, thin_at: THIN[s.grp] ?? 60, gap, spoken_words: spoken,
+      audio_min: t?.duration ? Math.round(t.duration / 6) / 10 : null, conf: t?.confidence ?? null, model: t?.model || null, language: t?.language || null, flags: J(t?.flags, []), error: t?.status === 'failed' ? t.error : null, done_at: t?.created_at || null,
+      claimed: s.audio_status === 'processing' ? claims[s.id] || null : null }
+  })
+  const tot: any = { expected: items.length, uploaded: 0, missing: 0, pending: 0, processing: 0, done: 0, review: 0, rejected: 0, failed: 0, typed_words_done: 0, spoken_words_done: 0, audio_min_total: 0, audio_min_left: 0 }
+  for (const i of items) {
+    if (i.status === 'missing') { tot.missing++; continue }
+    tot.uploaded++; if (tot[i.status] != null) tot[i.status]++
+    if (i.spoken_words != null) { tot.typed_words_done += i.typed_words; tot.spoken_words_done += i.spoken_words }
+    const m = i.audio_min ?? i.session_min ?? 0; tot.audio_min_total += m; if (['pending', 'failed', 'processing'].includes(i.status)) tot.audio_min_left += i.session_min ?? 30
+  }
+  tot.gain_x = tot.typed_words_done ? +(tot.spoken_words_done / tot.typed_words_done).toFixed(1) : null
+  const online = wk.find((w: any) => w.age_s < 90) || null
+  const rtf = online?.rtf || wk[0]?.rtf || null
+  const queue = items.filter((i: any) => ['pending', 'failed'].includes(i.status)).sort((a: any, b: any) => b.gap - a.gap || a.id - b.id)
+  return c.json({ workers: wk, online: !!online, recovered, totals: tot, eta_min: rtf && tot.audio_min_left ? Math.round(tot.audio_min_left * rtf) : null, rtf, items, queue_ids: queue.map((i: any) => i.id),
+    thin_waiting: queue.filter((i: any) => i.gap > 0).length })
+})
+// Full-text search across spoken (accepted or in-review) transcripts and typed answers
+app.get('/api/search', async (c) => {
+  const q = (c.req.query('q') || '').trim().toLowerCase(); if (q.length < 3) return c.json({ q, hits: [] })
+  const subs = await loadSubs(c, { consented: true }); const fsm = await formSchemas(c)
+  const trs: any = {}; (await c.env.DB.prepare("SELECT submission_id,segments,status FROM transcripts WHERE status IN ('done','review')").all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const hits: any[] = []
+  const snip = (t: string) => { const i = t.toLowerCase().indexOf(q); return (i > 60 ? '…' : '') + t.slice(Math.max(0, i - 60), i + q.length + 140) + (t.length > i + q.length + 140 ? '…' : '') }
+  for (const s of subs) {
+    const base = { id: s.id, form: s.code, label: whereLabel(s, fsm[s.form_uid]), enumerator: s.enumerator_id }
+    for (const [k, v] of Object.entries<string>(s.texts)) if (!SKIP_TEXT.has(k) && v.toLowerCase().includes(q)) hits.push({ ...base, source: 'typed', where: qlabel(fsm[s.form_uid], k), text: snip(anonymise(v)) })
+    const t = trs[s.id]; if (t) for (const g of J(t.segments, []) as any[]) if (String(g.text).toLowerCase().includes(q)) hits.push({ ...base, source: 'spoken' + (t.status === 'review' ? ' (unreviewed)' : ''), where: 'at ' + Math.floor(g.start / 60) + ':' + String(Math.floor(g.start % 60)).padStart(2, '0'), text: snip(anonymise(String(g.text))) })
+    if (hits.length > 200) break
+  }
+  return c.json({ q, n: hits.length, hits: hits.slice(0, 120) })
 })
 
 // ---------- audio proxy (keeps the Kobo token server-side) ----------
@@ -403,7 +484,10 @@ export function qualityFlags(s: any, tr: any) {
   if (s.duration_sec != null && s.duration_sec > 4 * 3600) f.push({ k: 'long_duration', sev: 'low', msg: 'Form open > 4 hours (draft left open?)' })
   const texts = Object.entries<string>(s.texts).filter(([k]) => !SKIP_TEXT.has(k) && k !== 'photo_caption').map(([, v]) => v)
   const thin = THIN[s.grp] ?? 60
-  if (s.text_words < thin) f.push({ k: 'thin_text', sev: 'high', msg: `Only ${s.text_words} words across all open-ended answers` })
+  if (s.text_words < thin) {
+    if (tr?.status === 'done' && (tr.words || 0) >= Math.max(150, thin * 3)) f.push({ k: 'thin_text', sev: 'low', msg: `Typed notes are thin (${s.text_words} words) but the accepted transcript adds ${tr.words} spoken words` })
+    else f.push({ k: 'thin_text', sev: 'high', msg: `Only ${s.text_words} words across all open-ended answers${s.audio_url ? ' (recording not yet transcribed: transcribing it will recover the detail)' : ''}` })
+  }
   const junk = texts.filter(t => /(.)\1{2,}/i.test(t) || (t.split(/\s+/).length <= 1 && t.length < 6))
   if (texts.length >= 4 && junk.length / texts.length > 0.5) f.push({ k: 'test_like', sev: 'high', msg: 'Open-ended answers look like test/gibberish input' })
   const dup = texts.filter((t, i) => t.length > 12 && texts.indexOf(t) !== i)
@@ -425,15 +509,16 @@ export function qualityFlags(s: any, tr: any) {
   if (tr) {
     const fl = J(tr.flags, []) as string[]
     if (tr.duration && s.duration_sec && s.duration_sec >= 900 && s.duration_sec <= 7200 && tr.duration < 0.3 * s.duration_sec) f.push({ k: 'audio_short', sev: 'low', msg: `Recording is ${Math.round(tr.duration / 60)} min but the session lasted ${Math.round(s.duration_sec / 60)} min` })
+    if (fl.includes('damaged_audio')) f.push({ k: 'damaged_audio', sev: 'med', msg: 'Part of the recording was corrupted on the phone; some speech is missing from the transcript' })
     if (tr.status === 'review') f.push({ k: 'transcript_review', sev: 'high', msg: 'Transcript flagged (' + (fl.join(', ') || 'low quality') + '): needs human review before coding' })
-    else if (fl.length) f.push({ k: 'transcript_note', sev: 'low', msg: 'Transcript notes: ' + fl.join(', ') })
+    else if (fl.filter(x => x !== 'damaged_audio').length) f.push({ k: 'transcript_note', sev: 'low', msg: 'Transcript notes: ' + fl.filter(x => x !== 'damaged_audio').join(', ') })
   }
   return f
 }
 // Flags for every live record (single-record checks + cross-record checks). Records marked "valid" keep their flags but as acknowledged.
 async function flagMap(c: any) {
   const subs = await loadSubs(c, { raw: true })
-  const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const trs: any = {}; (await c.env.DB.prepare(`SELECT submission_id,status,flags,confidence,duration,LENGTH(TRIM(COALESCE(text,'')))-LENGTH(REPLACE(TRIM(COALESCE(text,'')),' ',''))+1 AS words FROM transcripts`).all()).results.forEach((t: any) => trs[t.submission_id] = t)
   const cross = crossFlags(subs, { code: (s: any) => s.code, lg: (l: string) => LG_BY[l] })
   const m = new Map<number, Flag[]>()
   for (const s of subs) {
@@ -647,7 +732,7 @@ app.get('/api/export/submissions.csv', async (c) => {
 app.get('/api/map', async (c) => {
   const subs = await loadSubs(c)
   const fsm = await formSchemas(c)
-  const trs: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration FROM transcripts').all()).results.forEach((t: any) => trs[t.submission_id] = t)
+  const trs: any = {}; (await c.env.DB.prepare(`SELECT submission_id,status,flags,confidence,duration,LENGTH(TRIM(COALESCE(text,'')))-LENGTH(REPLACE(TRIM(COALESCE(text,'')),' ',''))+1 AS words FROM transcripts`).all()).results.forEach((t: any) => trs[t.submission_id] = t)
   const points: any[] = [], missing: any[] = []
   const per: any = {}
   for (const s of subs) {
@@ -712,7 +797,7 @@ app.get('/api/report', async (c) => {
   const cf = codeFilter(c)
   const codes = (await c.env.DB.prepare(`SELECT submission_id sid,source,seg_start,theme,polarity,evidence,excerpt FROM codes ${cf.where} ORDER BY id`).bind(...cf.b).all()).results as any[]
   const per: Record<string, any[]> = {}; codes.forEach(r => { if (r.evidence !== 'inferred') (per[r.theme] ||= []).push(r) })
-  const trAll: any = {}; (await c.env.DB.prepare('SELECT submission_id,status,flags,confidence,duration,model FROM transcripts').all()).results.forEach((t: any) => trAll[t.submission_id] = t)
+  const trAll: any = {}; (await c.env.DB.prepare(`SELECT submission_id,status,flags,confidence,duration,model,LENGTH(TRIM(COALESCE(text,'')))-LENGTH(REPLACE(TRIM(COALESCE(text,'')),' ',''))+1 AS words FROM transcripts`).all()).results.forEach((t: any) => trAll[t.submission_id] = t)
   const nAll = subs.length, nOff = th.n_off, nTrd = th.n_trd
 
   const quote = (r: any) => {
@@ -737,13 +822,15 @@ app.get('/api/report', async (c) => {
   const formsOut = Object.values(fsm).map(f => {
     const fsubs = allSubs.filter(s => s.form_uid === f.uid), fc = fsubs.filter(s => s.consent_interview !== 'no')
     const a: any = {}; fsubs.forEach(s => inc(a, s.audio_status))
-    return { code: f.meta.code || '', name: shortName(f.name), group: GROUP_LABELS[f.meta.group] || f.meta.group || '', kind: f.kind, submissions: fsubs.length, consented: fc.length, declined: fsubs.length - fc.length, audio: a, words: fc.reduce((x, s) => x + (s.text_words || 0), 0) }
+    return { code: f.meta.code || '', name: shortName(f.name), group: GROUP_LABELS[f.meta.group] || f.meta.group || '', kind: f.kind, submissions: fsubs.length, consented: fc.length, declined: fsubs.length - fc.length, audio: a, words: fc.reduce((x, s) => x + (s.text_words || 0), 0), spoken_words: fc.reduce((x, s) => x + (trAll[s.id]?.status === 'done' ? trAll[s.id].words || 0 : 0), 0), awaiting: fc.filter(s => s.audio_url && ['pending', 'processing', 'failed'].includes(s.audio_status)).length }
   }).filter(f => f.submissions || true)
   const trList = Object.values<any>(trAll).filter(t => byId.has(t.submission_id))
   const lgSet = new Set(subs.map(s => s.lg).filter(Boolean))
   const caveats: string[] = []
   const nReview = trList.filter(t => t.status === 'review').length
   if (nReview) caveats.push(`${nReview} audio transcript${nReview === 1 ? ' is' : 's are'} held in "Needs review" (low confidence, repetition or almost no speech) and ${nReview === 1 ? 'is' : 'are'} NOT coded into the themes until accepted by a person. They are still reproduced in Appendix B for transparency.`)
+  const awaiting = subs.filter((s: any) => s.audio_url && ['pending', 'processing', 'failed'].includes(s.audio_status)).length
+  if (awaiting) caveats.push(`${awaiting} recording${awaiting === 1 ? ' has' : 's have'} not yet been transcribed. Interviewers typed only short notes for open-ended questions, so the findings below rest on those short notes and will deepen once the recordings are transcribed.`)
   const silent = trList.filter(t => (JSON.parse(t.flags || '[]') as string[]).includes('little_speech')).length
   if (silent) caveats.push(`${silent} recording${silent === 1 ? '' : 's'} contained little or no speech (possible microphone or consent-to-record problem).`)
   const noAudio = subs.filter(s => s.consent_audio === 'yes' && !s.audio_url).length
@@ -769,7 +856,7 @@ app.get('/api/report', async (c) => {
 
   const coverage = { lgs_covered: lgSet.size, lgs_total: LGS.length, by_lg: Object.entries(subs.reduce((a: any, s) => (s.lg && (a[s.lg] = (a[s.lg] || 0) + 1), a), {})).map(([k, v]) => ({ lg: k, label: lgLabel(k), n: v })).sort((a: any, b: any) => b.n - a.n) }
   const refs = (LIT as any[]).map(r => ({ n: r.n, cat: r.cat, text: r.text }))
-  const sources = [...subs].sort((a, b) => a.id - b.id).map(s => ({ ref: refOf(fsm, s), id: s.id, form: fsm[s.form_uid]?.meta?.code || '', where: whereLabel(s, fsm[s.form_uid]), group: GROUP_LABELS[s.grp] || s.grp, date: s.interview_date, audio: trAll[s.id]?.status || s.audio_status, words: s.text_words }))
+  const sources = [...subs].sort((a, b) => a.id - b.id).map(s => ({ ref: refOf(fsm, s), id: s.id, form: fsm[s.form_uid]?.meta?.code || '', where: whereLabel(s, fsm[s.form_uid]), group: GROUP_LABELS[s.grp] || s.grp, date: s.interview_date, audio: trAll[s.id]?.status || s.audio_status, words: s.text_words, spoken: trAll[s.id]?.status === 'done' ? trAll[s.id].words || 0 : null }))
   const grpCount: any = {}; subs.forEach(s => inc(grpCount, GROUP_LABELS[s.grp] || s.grp))
   return c.json({
     generated: new Date().toISOString(), scope: { region: c.req.query('region') || '', lg: c.req.query('lg') || '', grp: c.req.query('grp') || '' },
